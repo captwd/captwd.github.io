@@ -1,0 +1,170 @@
+/* ========== 全局背景 ========== */
+#web_bg {
+  opacity: 0.88;
+  filter: saturate(1.05) brightness(0.9);
+}
+
+/* ========== 顶部导航栏 ========== */
+#nav {
+  background: rgba(15, 18, 28, 0.35) !important;
+  backdrop-filter: blur(14px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+  border-bottom: 1px solid rgba(180, 220, 255, 0.12) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* 导航文字 */
+#nav .site-name,
+#nav .menus_items .menus_item .site-page,
+#nav #toggle-menu,
+#nav a {
+  color: rgba(235, 245, 255, 0.92) !important;
+}
+
+/* 导航 hover */
+#nav a:hover {
+  color: #9fd3ff !important;
+  text-shadow: 0 0 10px rgba(159, 211, 255, 0.35);
+}
+
+/* ========== 首页顶部大图遮罩 ========== */
+#page-header::before {
+  background: linear-gradient(
+    to bottom,
+    rgba(8, 12, 20, 0.35),
+    rgba(12, 18, 30, 0.18),
+    rgba(8, 12, 20, 0.42)
+  ) !important;
+}
+
+/* 首页标题文字更有氛围 */
+#site-title,
+#site-subtitle,
+#site-info {
+  text-shadow:
+    0 0 12px rgba(120, 190, 255, 0.18),
+    0 0 30px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* ========== 主卡片区域 ========== */
+#recent-posts > .recent-post-item,
+.card-widget,
+div#post,
+div#page,
+div#archive {
+  background: rgba(18, 22, 34, 0.42) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
+  border: 1px solid rgba(180, 220, 255, 0.1) !important;
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.22),
+    0 0 18px rgba(120, 180, 255, 0.06) !important;
+  border-radius: 20px !important;
+}
+
+.layout > div:first-child:not(.recent-posts),
+.layout_page {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* 卡片 hover 更灵动 */
+#recent-posts > .recent-post-item:hover,
+.card-widget:hover {
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.28),
+    0 0 22px rgba(120, 190, 255, 0.12) !important;
+  transform: translateY(-3px);
+  transition: all 0.3s ease;
+}
+
+.layout_page:hover {
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* 强制统一首页文章卡片为整块深色毛玻璃 */
+#recent-posts .recent-post-item {
+  background: rgba(18, 22, 34, 0.42) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
+  border: 1px solid rgba(180, 220, 255, 0.1) !important;
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.22),
+    0 0 18px rgba(120, 180, 255, 0.06) !important;
+  border-radius: 20px !important;
+}
+
+#recent-posts .recent-post-item:hover {
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.28),
+    0 0 22px rgba(120, 190, 255, 0.12) !important;
+}
+
+/* 去掉内层分界线，让整张卡片保持统一 */
+#recent-posts .recent-post-item .recent-post-info {
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+/* ========== 侧边栏按钮 ========== */
+#rightside > div > button,
+#rightside > div > a {
+  background: rgba(20, 24, 36, 0.5) !important;
+  backdrop-filter: blur(12px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(140%) !important;
+  border: 1px solid rgba(180, 220, 255, 0.1) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* 侧边按钮 hover */
+#rightside > div > button:hover,
+#rightside > div > a:hover {
+  background: rgba(35, 42, 58, 0.58) !important;
+  box-shadow: 0 0 16px rgba(140, 200, 255, 0.16) !important;
+}
+
+/* ========== 页脚 ========== */
+#footer {
+  background: rgba(15, 18, 28, 0.38) !important;
+  backdrop-filter: blur(14px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(130%) !important;
+  border-top: 1px solid rgba(180, 220, 255, 0.08) !important;
+}
+
+/* ========== 文章标题 / 文本颜色优化 ========== */
+#article-container,
+.post-content,
+.card-info,
+.site-data,
+.author-info__name,
+.author-info__description {
+  color: rgba(235, 240, 250, 0.92) !important;
+}
+
+/* 链接颜色 */
+a {
+  color: #8ecaff;
+}
+
+a:hover {
+  color: #b8e1ff;
+}
+
+/* ========== 滚动条美化 ========== */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(10, 12, 20, 0.35);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 170, 220, 0.35);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 200, 255, 0.5);
+}
