@@ -43,13 +43,27 @@
   animation: veilFade 1.8s ease-out both;
 }
 
-/* 首页标题文字更有氛围 */
+/* ========== 首页标题文字更有氛围 ========== */
 #site-title,
 #site-subtitle,
 #site-info {
   text-shadow:
     0 0 12px rgba(120, 190, 255, 0.18),
     0 0 30px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* ========== 文章页面标题更亮 ========== */
+#page-header.post-bg .post-title {
+  color: rgba(255, 255, 255, 0.98) !important;
+  text-shadow:
+    0 0 10px rgba(120, 190, 255, 0.4),
+    0 0 20px rgba(120, 190, 255, 0.2),
+    0 0 30px rgba(0, 0, 0, 0.4);
+}
+
+#page-header.post-bg .post-meta,
+#page-header.post-bg .post-meta a {
+  color: rgba(235, 245, 255, 0.90) !important;
 }
 
 /* ========== 主卡片区域 ========== */
