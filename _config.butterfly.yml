@@ -21,6 +21,7 @@ menu:
   首页: / || fas fa-home
   文章: /archives/ || fas fa-archive
   动态: /moments/ || fas fa-heart
+  相册: /photos/ || fas fa-images
   分类: /categories/ || fas fa-folder-open
   标签: /tags/ || fas fa-tags
   留言板: /message/ || fas fa-comments
