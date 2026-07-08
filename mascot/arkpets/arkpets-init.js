@@ -25,10 +25,6 @@
 
   function initArkPets() {
     if (typeof arkpets !== 'undefined' && arkpets.Character) {
-      var style = document.createElement('style');
-      style.textContent = '.arkpets-canvas { opacity: 1; pointer-events: auto; transition: opacity 0.5s ease; }';
-      document.head.appendChild(style);
-
       character = new arkpets.Character(
         'arkpets-demo',
         function (e) {
@@ -43,8 +39,8 @@
       console.log('ArkPets initialized:', character);
 
       setTimeout(function () {
-        style.remove();
-      }, 200);
+        showPet();
+      }, 100);
     } else {
       console.warn('ArkPets not loaded yet, retrying...');
       setTimeout(initArkPets, 500);
