@@ -1,0 +1,419 @@
+/* ========== 全局背景 ========== */
+#web_bg {
+  opacity: 0.88;
+  filter: saturate(1.05) brightness(0.9);
+}
+
+/* ========== 顶部导航栏 ========== */
+#nav {
+  background: rgba(15, 18, 28, 0.35) !important;
+  backdrop-filter: blur(14px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+  border-bottom: 1px solid rgba(180, 220, 255, 0.12) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* 导航文字 */
+#nav .site-name,
+#nav .menus_items .menus_item .site-page,
+#nav #toggle-menu,
+#nav a {
+  color: rgba(235, 245, 255, 0.92) !important;
+}
+
+/* 导航 hover */
+#nav a:hover {
+  color: #9fd3ff !important;
+  text-shadow: 0 0 10px rgba(159, 211, 255, 0.35);
+}
+
+/* ========== 首页顶部大图遮罩（柔和氛围） ========== */
+#page-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.10), transparent 28%),
+    radial-gradient(circle at 78% 22%, rgba(255, 255, 255, 0.08), transparent 24%),
+    radial-gradient(circle at 65% 70%, rgba(255, 255, 255, 0.06), transparent 30%),
+    linear-gradient(to bottom, rgba(8, 12, 22, 0.52), rgba(8, 12, 22, 0.28));
+  opacity: 0.95;
+  animation: veilFade 1.8s ease-out both;
+}
+
+/* ========== 首页标题文字更有氛围 ========== */
+#site-title,
+#site-subtitle,
+#site-info {
+  text-shadow:
+    0 0 12px rgba(120, 190, 255, 0.18),
+    0 0 30px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* ========== 文章页面标题更亮 ========== */
+#page-header.post-bg:before {
+  background-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+#post-info .post-title {
+  color: #ffffff !important;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.8),
+    0 0 15px rgba(255, 255, 255, 0.4),
+    0 0 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+#post-info #post-meta,
+#post-info #post-meta a,
+#post-info #post-meta span,
+#post-info #post-meta i {
+  color: #ffffff !important;
+}
+
+/* ========== 主卡片区域 ========== */
+#recent-posts > .recent-post-item,
+.card-widget,
+div#post,
+div#page,
+div#archive {
+  background: rgba(18, 22, 34, 0.42) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
+  border: 1px solid rgba(180, 220, 255, 0.1) !important;
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.22),
+    0 0 18px rgba(120, 180, 255, 0.06) !important;
+  border-radius: 20px !important;
+}
+
+.layout > div:first-child:not(.recent-posts),
+.layout_page {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* 卡片 hover 更灵动 */
+#recent-posts > .recent-post-item:hover,
+.card-widget:hover {
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.28),
+    0 0 22px rgba(120, 190, 255, 0.12) !important;
+  transform: translateY(-3px);
+  transition: all 0.3s ease;
+}
+
+.layout_page:hover {
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* 强制统一首页文章卡片为整块深色毛玻璃 */
+#recent-posts .recent-post-item {
+  background: rgba(18, 22, 34, 0.42) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
+  border: 1px solid rgba(180, 220, 255, 0.1) !important;
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.22),
+    0 0 18px rgba(120, 180, 255, 0.06) !important;
+  border-radius: 20px !important;
+}
+
+#recent-posts .recent-post-item:hover {
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.28),
+    0 0 22px rgba(120, 190, 255, 0.12) !important;
+}
+
+/* 去掉内层分界线，让整张卡片保持统一 */
+#recent-posts .recent-post-item .recent-post-info {
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+
+/* ========== 侧边栏按钮 ========== */
+#rightside > div > button,
+#rightside > div > a {
+  background: rgba(20, 24, 36, 0.5) !important;
+  backdrop-filter: blur(12px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(140%) !important;
+  border: 1px solid rgba(180, 220, 255, 0.1) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* 侧边按钮 hover */
+#rightside > div > button:hover,
+#rightside > div > a:hover {
+  background: rgba(35, 42, 58, 0.58) !important;
+  box-shadow: 0 0 16px rgba(140, 200, 255, 0.16) !important;
+}
+
+/* ========== 页脚 ========== */
+#footer {
+  background: rgba(15, 18, 28, 0.38) !important;
+  backdrop-filter: blur(14px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(130%) !important;
+  border-top: 1px solid rgba(180, 220, 255, 0.08) !important;
+}
+
+/* ========== 文章标题 / 文本颜色优化 ========== */
+#article-container,
+.post-content,
+.card-info,
+.site-data,
+.author-info__name,
+.author-info__description {
+  color: rgba(235, 240, 250, 0.92) !important;
+}
+
+/* 链接颜色 */
+a {
+  color: #8ecaff;
+}
+
+a:hover {
+  color: #b8e1ff;
+}
+
+/* ========== 滚动条美化 ========== */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(10, 12, 20, 0.35);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 170, 220, 0.35);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 200, 255, 0.5);
+}
+
+/* ========================================
+   柔和入场动画 —— 进浏览器动态效果
+   ======================================== */
+
+/* --- 整体内容区淡入上升 --- */
+#content-wrap {
+  animation: pageEnter 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* --- Home hero 动画 --- */
+
+/* Header 微缩放淡入 */
+#page-header {
+  position: relative;
+  overflow: hidden;
+  animation: headerReveal 1.4s ease-out both;
+}
+
+/* 柔和光粒子层 */
+#page-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.85) 0 1px, transparent 2px),
+    radial-gradient(circle at 24% 42%, rgba(255, 255, 255, 0.70) 0 1px, transparent 2px),
+    radial-gradient(circle at 38% 26%, rgba(255, 255, 255, 0.55) 0 1px, transparent 2px),
+    radial-gradient(circle at 52% 16%, rgba(255, 255, 255, 0.75) 0 1px, transparent 2px),
+    radial-gradient(circle at 63% 38%, rgba(255, 255, 255, 0.60) 0 1px, transparent 2px),
+    radial-gradient(circle at 74% 22%, rgba(255, 255, 255, 0.82) 0 1px, transparent 2px),
+    radial-gradient(circle at 82% 48%, rgba(255, 255, 255, 0.58) 0 1px, transparent 2px),
+    radial-gradient(circle at 90% 28%, rgba(255, 255, 255, 0.76) 0 1px, transparent 2px);
+  opacity: 0;
+  transform: translateY(8px) scale(1.01);
+  animation: particlesIn 2.2s ease-out 0.25s both;
+}
+
+/* 首页标题浮入 */
+#site-info {
+  position: relative;
+  z-index: 3;
+  animation: siteInfoFloatIn 1.3s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+/* 副标题 & 滚动提示错落节奏 */
+#site-subtitle,
+#scroll-down {
+  animation: softFadeUp 1.2s ease-out 0.45s both;
+}
+
+/* --- 首页文章卡片错落上升 --- */
+#recent-posts > .recent-post-item,
+#aside-content .card-widget,
+.layout_page > div:first-child {
+  animation: cardRiseIn 0.9s ease-out both;
+}
+
+#recent-posts > .recent-post-item:nth-child(1) { animation-delay: 0.08s; }
+#recent-posts > .recent-post-item:nth-child(2) { animation-delay: 0.16s; }
+#recent-posts > .recent-post-item:nth-child(3) { animation-delay: 0.24s; }
+#recent-posts > .recent-post-item:nth-child(4) { animation-delay: 0.32s; }
+#recent-posts > .recent-post-item:nth-child(5) { animation-delay: 0.40s; }
+
+/* --- 文章页 / 独立页正文逐块浮现 --- */
+#post,
+#page {
+  animation: blockFadeUp 0.8s ease-out both;
+}
+
+#post > *,
+#page > * {
+  animation: blockFadeUp 0.7s ease-out both;
+}
+
+#post > *:nth-child(1) { animation-delay: 0.04s; }
+#post > *:nth-child(2) { animation-delay: 0.08s; }
+#post > *:nth-child(3) { animation-delay: 0.12s; }
+#post > *:nth-child(4) { animation-delay: 0.16s; }
+#post > *:nth-child(5) { animation-delay: 0.20s; }
+#post > *:nth-child(6) { animation-delay: 0.24s; }
+#post > *:nth-child(7) { animation-delay: 0.28s; }
+#post > *:nth-child(8) { animation-delay: 0.32s; }
+
+/* --- 归档页条目逐条淡入 --- */
+.article-sort-item {
+  animation: softFadeUp 0.6s ease-out both;
+}
+
+.article-sort-item:nth-child(1)  { animation-delay: 0.04s; }
+.article-sort-item:nth-child(2)  { animation-delay: 0.08s; }
+.article-sort-item:nth-child(3)  { animation-delay: 0.12s; }
+.article-sort-item:nth-child(4)  { animation-delay: 0.16s; }
+.article-sort-item:nth-child(5)  { animation-delay: 0.20s; }
+.article-sort-item:nth-child(6)  { animation-delay: 0.24s; }
+.article-sort-item:nth-child(7)  { animation-delay: 0.28s; }
+.article-sort-item:nth-child(8)  { animation-delay: 0.32s; }
+.article-sort-item:nth-child(9)  { animation-delay: 0.36s; }
+.article-sort-item:nth-child(10) { animation-delay: 0.40s; }
+
+/* --- Keyframes --- */
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes headerReveal {
+  from {
+    opacity: 0.96;
+    transform: scale(1.015);
+    filter: brightness(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes veilFade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.72;
+  }
+}
+
+@keyframes particlesIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(1.02);
+    filter: blur(2px);
+  }
+  60% {
+    opacity: 0.75;
+  }
+  to {
+    opacity: 0.42;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes siteInfoFloatIn {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes softFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cardRiseIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes blockFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
+
+/* ========== 尊重用户动画偏好 ========== */
+@media (prefers-reduced-motion: reduce) {
+  #content-wrap,
+  #page-header,
+  #page-header::before,
+  #page-header::after,
+  #site-info,
+  #site-subtitle,
+  #scroll-down,
+  #recent-posts > .recent-post-item,
+  #aside-content .card-widget,
+  .layout_page > div:first-child,
+  #post,
+  #page,
+  #post > *,
+  #page > *,
+  .article-sort-item {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,0 +1,210 @@
+/* ====== 看板娘 ── 黍 looklook ====== */
+
+/* 触发按钮（左下角小圆钮） */
+#looklook-btn {
+  position: fixed;
+  left: 25px;
+  bottom: 80px;
+  z-index: 1000;
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(18, 22, 34, 0.60);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid rgba(180, 220, 255, 0.15);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  background-image: url('/img/泡泡.webp');
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center center;
+  overflow: hidden;
+}
+
+#looklook-btn:hover {
+  background-color: rgba(35, 42, 58, 0.72);
+  box-shadow: 0 0 18px rgba(140, 200, 255, 0.18);
+  transform: scale(1.08);
+}
+
+#looklook-btn.active {
+  background-image: none;
+  background-color: rgba(18, 22, 34, 0.60);
+  color: rgba(235, 245, 255, 0.90);
+  font-size: 24px;
+  line-height: 1;
+}
+
+/* 主面板 */
+#looklook-panel {
+  position: fixed;
+  left: 30px;
+  bottom: 140px;
+  z-index: 999;
+  width: 240px;
+  height: 340px;
+  background: rgba(14, 18, 28, 0.55);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgba(180, 220, 255, 0.10);
+  border-radius: 20px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.30),
+    0 0 20px rgba(120, 180, 255, 0.06);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  transform-origin: bottom left;
+}
+
+#looklook-panel.show {
+  display: flex;
+  animation: panelIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+#looklook-panel.hide {
+  animation: panelOut 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: scale(0.85) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes panelOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.85) translateY(12px);
+  }
+}
+
+/* 标题栏 */
+#looklook-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 4px;
+  flex-shrink: 0;
+}
+
+#looklook-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(235, 245, 255, 0.80);
+  letter-spacing: 1px;
+}
+
+#looklook-switch {
+  background: none;
+  border: none;
+  color: rgba(180, 210, 255, 0.55);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: all 0.25s ease;
+}
+
+#looklook-switch:hover {
+  color: rgba(180, 210, 255, 0.90);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#looklook-close {
+  background: none;
+  border: none;
+  color: rgba(180, 210, 255, 0.40);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: all 0.25s ease;
+}
+
+#looklook-close:hover {
+  color: rgba(255, 180, 180, 0.85);
+}
+
+/* Spine Canvas 容器 */
+#looklook-canvas-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#looklook-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Fallback 文字覆盖层 */
+#looklook-fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: rgba(180, 210, 255, 0.45);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
+/* 底部提示 */
+#looklook-hint {
+  text-align: center;
+  padding: 4px 0 10px;
+  font-size: 11px;
+  color: rgba(180, 210, 255, 0.35);
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  #looklook-panel {
+    left: 10px;
+    bottom: 130px;
+    width: 180px;
+    height: 260px;
+  }
+  #looklook-btn {
+    left: 12px;
+    bottom: 72px;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+}
+
+/* 减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  #looklook-panel,
+  #looklook-panel.show,
+  #looklook-panel.hide {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,0 +1,95 @@
+(function () {
+  'use strict';
+
+  var CHARACTER_RESOURCES = [
+    {
+      id: 'shu',
+      name: '黍',
+      skeleton: 'models/shu/build_char_2025_shu.skel',
+      atlas: 'models/shu/build_char_2025_shu.atlas',
+      texture: 'models/shu/build_char_2025_shu.png',
+      resourcePath: '/mascot/arkpets/'
+    },
+    {
+      id: 'shu-nian',
+      name: '黍·年',
+      skeleton: 'models/shu-nian/build_char_2025_shu_nian#11.skel',
+      atlas: 'models/shu-nian/build_char_2025_shu_nian#11.atlas',
+      texture: 'models/shu-nian/build_char_2025_shu_nian#11.png',
+      resourcePath: '/mascot/arkpets/'
+    }
+  ];
+
+  var character = null;
+  var isVisible = true;
+
+  function initArkPets() {
+    if (typeof arkpets !== 'undefined' && arkpets.Character) {
+      character = new arkpets.Character(
+        'arkpets-demo',
+        function (e) {
+          arkpets.showContextMenu(e, character, {
+            getCharacterModels: function () {
+              return CHARACTER_RESOURCES;
+            }
+          });
+        },
+        CHARACTER_RESOURCES[0]
+      );
+      console.log('ArkPets initialized:', character);
+
+      setTimeout(function () {
+        showPet();
+      }, 100);
+    } else {
+      console.warn('ArkPets not loaded yet, retrying...');
+      setTimeout(initArkPets, 500);
+    }
+  }
+
+  function showPet() {
+    var canvas = document.getElementById('arkpets-demo');
+    if (canvas) {
+      canvas.style.transition = 'opacity 0.5s ease';
+      canvas.style.pointerEvents = 'auto';
+      canvas.style.opacity = '1';
+    }
+    isVisible = true;
+  }
+
+  function hidePet() {
+    var canvas = document.getElementById('arkpets-demo');
+    if (canvas) {
+      canvas.style.transition = 'opacity 0.5s ease';
+      canvas.style.opacity = '0';
+      setTimeout(function () {
+        if (!isVisible) {
+          canvas.style.pointerEvents = 'none';
+        }
+      }, 500);
+    }
+    isVisible = false;
+  }
+
+  function togglePet() {
+    if (isVisible) {
+      hidePet();
+    } else {
+      showPet();
+    }
+    return isVisible;
+  }
+
+  window.ArkPets = {
+    show: showPet,
+    hide: hidePet,
+    toggle: togglePet,
+    isVisible: function () { return isVisible; }
+  };
+
+  if (document.readyState !== 'loading') {
+    initArkPets();
+  } else {
+    document.addEventListener('DOMContentLoaded', initArkPets);
+  }
+})();
