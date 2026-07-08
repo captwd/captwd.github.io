@@ -26,7 +26,7 @@
   function initArkPets() {
     if (typeof arkpets !== 'undefined' && arkpets.Character) {
       var style = document.createElement('style');
-      style.textContent = '.arkpets-canvas { opacity: 0 !important; pointer-events: none !important; }';
+      style.textContent = '.arkpets-canvas { opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }';
       document.head.appendChild(style);
 
       character = new arkpets.Character(
@@ -55,8 +55,9 @@
   function showPet() {
     var canvas = document.getElementById('arkpets-demo');
     if (canvas) {
-      canvas.style.opacity = '1';
+      canvas.style.transition = 'opacity 0.5s ease';
       canvas.style.pointerEvents = 'auto';
+      canvas.style.opacity = '1';
     }
     isVisible = true;
   }
@@ -64,8 +65,13 @@
   function hidePet() {
     var canvas = document.getElementById('arkpets-demo');
     if (canvas) {
+      canvas.style.transition = 'opacity 0.5s ease';
       canvas.style.opacity = '0';
-      canvas.style.pointerEvents = 'none';
+      setTimeout(function () {
+        if (!isVisible) {
+          canvas.style.pointerEvents = 'none';
+        }
+      }, 500);
     }
     isVisible = false;
   }
