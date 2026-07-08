@@ -1,12 +1,14 @@
 (function () {
   'use strict';
 
-  var VISIBLE = false;
+  var VISIBLE = true;
 
   function buildDOM() {
     var btn = document.createElement('button');
     btn.id = 'looklook-btn';
-    btn.title = '召唤黍';
+    btn.title = '收起黍';
+    btn.classList.add('active');
+    btn.textContent = '×';
     btn.addEventListener('click', toggle);
     document.body.appendChild(btn);
   }

@@ -21,12 +21,12 @@
   ];
 
   var character = null;
-  var isVisible = false;
+  var isVisible = true;
 
   function initArkPets() {
     if (typeof arkpets !== 'undefined' && arkpets.Character) {
       var style = document.createElement('style');
-      style.textContent = '.arkpets-canvas { opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }';
+      style.textContent = '.arkpets-canvas { opacity: 1; pointer-events: auto; transition: opacity 0.5s ease; }';
       document.head.appendChild(style);
 
       character = new arkpets.Character(
@@ -44,7 +44,6 @@
 
       setTimeout(function () {
         style.remove();
-        hidePet();
       }, 200);
     } else {
       console.warn('ArkPets not loaded yet, retrying...');
