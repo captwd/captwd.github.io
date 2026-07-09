@@ -38,7 +38,7 @@
   var currentResponse = '';
   var currentAudio = null;
 
-  var API_BASE_URL = 'https://api-hc686dyr2-blog13.vercel.app';
+  var API_BASE_URL = 'https://api-n6758pb57-blog13.vercel.app';
   var TTS_VOICE_ID = '6152d1d4-8e30-4847-bf7a-87560bf431e8';
 
   var messages = [
