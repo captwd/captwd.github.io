@@ -163,6 +163,15 @@
     if (dialogBox) {
       dialogBox.style.display = 'flex';
       dialogBox.classList.add('chat-mode');
+      dialogBox.style.minWidth = '220px';
+      dialogBox.style.maxWidth = '280px';
+      dialogText.style.whiteSpace = 'normal';
+      dialogText.style.maxWidth = '100%';
+      dialogText.style.textAlign = 'left';
+      var inputContainer = document.getElementById('arkpets-dialog-input-container');
+      if (inputContainer) {
+        inputContainer.style.display = 'flex';
+      }
       dialogInput.focus();
     }
     if (chatIcon) {
@@ -351,7 +360,7 @@
           lastCanvasPos.y = currentY;
 
           if (dialogBox && dialogBox.style.display !== 'none') {
-            var offsetY = isChatMode ? -100 : -60;
+            var offsetY = isChatMode ? -80 : -45;
             dialogBox.style.left = currentX + 'px';
             dialogBox.style.top = (currentY + offsetY) + 'px';
           }
