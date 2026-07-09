@@ -12,7 +12,7 @@
     },
     {
       id: 'shu-nian',
-      name: '黍·年',
+      name: '春日宴',
       skeleton: 'models/shu-nian/build_char_2025_shu_nian#11.skel',
       atlas: 'models/shu-nian/build_char_2025_shu_nian#11.atlas',
       texture: 'models/shu-nian/build_char_2025_shu_nian#11.png',
@@ -308,7 +308,7 @@
           lastCanvasPos.x = currentX;
           lastCanvasPos.y = currentY;
 
-          var offsetY = isChatMode ? -120 : -80;
+          var offsetY = isChatMode ? -100 : -60;
           dialogBox.style.left = currentX + 'px';
           dialogBox.style.top = (currentY + offsetY) + 'px';
         }
