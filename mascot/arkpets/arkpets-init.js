@@ -28,6 +28,7 @@
   var dialogSendBtn = null;
   var dialogVoiceBtn = null;
   var dialogCloseBtn = null;
+  var chatIcon = null;
   var isChatMode = false;
   var isSpeaking = false;
   var audioContext = null;
@@ -86,7 +87,16 @@
     dialogCloseBtn.innerHTML = '×';
     dialogCloseBtn.addEventListener('click', function(e) {
       e.stopPropagation();
-      exitChatMode();
+      hideDialog();
+    });
+
+    chatIcon = document.createElement('button');
+    chatIcon.id = 'arkpets-chat-icon';
+    chatIcon.className = 'arkpets-chat-icon';
+    chatIcon.innerHTML = '💬';
+    chatIcon.addEventListener('click', function(e) {
+      e.stopPropagation();
+      showDialog();
     });
 
     inputContainer.appendChild(dialogInput);
@@ -97,9 +107,10 @@
     dialogBox.appendChild(dialogText);
     dialogBox.appendChild(inputContainer);
 
-    dialogBox.addEventListener('click', toggleChatMode);
-
     document.body.appendChild(dialogBox);
+    document.body.appendChild(chatIcon);
+
+    dialogBox.addEventListener('click', toggleChatMode);
 
     showRandomMessage();
     startPositionTracking();
@@ -127,6 +138,37 @@
       dialogVoiceBtn.innerHTML = '🔊';
     }
     showRandomMessage();
+  }
+
+  function hideDialog() {
+    if (dialogBox) {
+      dialogBox.style.display = 'none';
+    }
+    if (chatIcon) {
+      chatIcon.style.display = 'flex';
+    }
+    isChatMode = false;
+    dialogInput.blur();
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+    isSpeaking = false;
+    if (dialogVoiceBtn) {
+      dialogVoiceBtn.innerHTML = '🔊';
+    }
+  }
+
+  function showDialog() {
+    if (dialogBox) {
+      dialogBox.style.display = 'flex';
+      dialogBox.classList.add('chat-mode');
+      dialogInput.focus();
+    }
+    if (chatIcon) {
+      chatIcon.style.display = 'none';
+    }
+    isChatMode = true;
   }
 
   function handleInputKeyDown(e) {
@@ -299,7 +341,7 @@
   function startPositionTracking() {
     function updateDialogPosition() {
       var canvas = document.getElementById('arkpets-demo');
-      if (canvas && dialogBox && isVisible) {
+      if (canvas && isVisible) {
         var rect = canvas.getBoundingClientRect();
         var currentX = rect.left + rect.width / 2;
         var currentY = rect.top;
@@ -308,9 +350,16 @@
           lastCanvasPos.x = currentX;
           lastCanvasPos.y = currentY;
 
-          var offsetY = isChatMode ? -100 : -60;
-          dialogBox.style.left = currentX + 'px';
-          dialogBox.style.top = (currentY + offsetY) + 'px';
+          if (dialogBox && dialogBox.style.display !== 'none') {
+            var offsetY = isChatMode ? -100 : -60;
+            dialogBox.style.left = currentX + 'px';
+            dialogBox.style.top = (currentY + offsetY) + 'px';
+          }
+
+          if (chatIcon && chatIcon.style.display === 'flex') {
+            chatIcon.style.left = (currentX + 30) + 'px';
+            chatIcon.style.top = (currentY - 10) + 'px';
+          }
         }
       }
       followAnimation = requestAnimationFrame(updateDialogPosition);

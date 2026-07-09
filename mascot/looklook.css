@@ -271,8 +271,31 @@
   color: #333;
 }
 
-.arkpets-dialog.chat-mode .arkpets-dialog-close {
+.arkpets-dialog .arkpets-dialog-close {
   display: flex;
+}
+
+.arkpets-chat-icon {
+  position: fixed;
+  z-index: 1001;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+}
+
+.arkpets-chat-icon:hover {
+  background: rgba(255, 255, 255, 1);
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .arkpets-dialog-text {
