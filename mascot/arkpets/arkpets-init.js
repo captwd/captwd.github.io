@@ -367,7 +367,7 @@
 
           if (chatIcon && chatIcon.style.display === 'flex') {
             chatIcon.style.left = (currentX + 30) + 'px';
-            chatIcon.style.top = (currentY - 10) + 'px';
+            chatIcon.style.top = (currentY + 20) + 'px';
           }
         }
       }
