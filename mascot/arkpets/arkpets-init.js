@@ -27,6 +27,7 @@
   var dialogInput = null;
   var dialogSendBtn = null;
   var dialogVoiceBtn = null;
+  var dialogCloseBtn = null;
   var isChatMode = false;
   var isSpeaking = false;
   var audioContext = null;
@@ -34,8 +35,10 @@
   var followAnimation = null;
   var chatHistory = [];
   var currentResponse = '';
+  var currentAudio = null;
 
-  var API_BASE_URL = 'https://api-ogxttis4k2-blog13.vercel.app';
+  var API_BASE_URL = 'https://api-r1bb64l11-blog13.vercel.app';
+  var TTS_VOICE = 'female';
 
   var messages = [
     '今天天气真好~',
@@ -77,10 +80,20 @@
     dialogVoiceBtn.innerHTML = '🔊';
     dialogVoiceBtn.addEventListener('click', toggleSpeech);
 
+    dialogCloseBtn = document.createElement('button');
+    dialogCloseBtn.id = 'arkpets-dialog-close';
+    dialogCloseBtn.className = 'arkpets-dialog-close';
+    dialogCloseBtn.innerHTML = '×';
+    dialogCloseBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      exitChatMode();
+    });
+
     inputContainer.appendChild(dialogInput);
     inputContainer.appendChild(dialogVoiceBtn);
     inputContainer.appendChild(dialogSendBtn);
 
+    dialogBox.appendChild(dialogCloseBtn);
     dialogBox.appendChild(dialogText);
     dialogBox.appendChild(inputContainer);
 
@@ -100,15 +113,29 @@
     }
   }
 
+  function exitChatMode() {
+    isChatMode = false;
+    dialogBox.classList.remove('chat-mode');
+    dialogInput.blur();
+    dialogInput.value = '';
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+    isSpeaking = false;
+    if (dialogVoiceBtn) {
+      dialogVoiceBtn.innerHTML = '🔊';
+    }
+    showRandomMessage();
+  }
+
   function handleInputKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
     if (e.key === 'Escape') {
-      isChatMode = false;
-      dialogBox.classList.remove('chat-mode');
-      dialogInput.blur();
+      exitChatMode();
     }
   }
 
@@ -209,7 +236,8 @@
         body: JSON.stringify({
           text: text,
           language: 'Chinese',
-          stream: false
+          stream: false,
+          voice: TTS_VOICE
         })
       });
 
@@ -221,21 +249,25 @@
       var audioUrl = URL.createObjectURL(audioBlob);
 
       if (window.Audio) {
-        var audio = new Audio(audioUrl);
+        if (currentAudio) {
+          currentAudio.pause();
+          currentAudio = null;
+        }
+        currentAudio = new Audio(audioUrl);
         isSpeaking = true;
         dialogVoiceBtn.innerHTML = '⏸';
         
-        audio.onended = function() {
+        currentAudio.onended = function() {
           isSpeaking = false;
           dialogVoiceBtn.innerHTML = '🔊';
         };
         
-        audio.onerror = function() {
+        currentAudio.onerror = function() {
           isSpeaking = false;
           dialogVoiceBtn.innerHTML = '🔊';
         };
         
-        audio.play();
+        currentAudio.play();
       }
     } catch (error) {
       console.error('TTS error:', error);
