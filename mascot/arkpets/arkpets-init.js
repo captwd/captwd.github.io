@@ -37,8 +37,8 @@
   var currentResponse = '';
   var currentAudio = null;
 
-  var API_BASE_URL = 'https://api-r1bb64l11-blog13.vercel.app';
-  var TTS_VOICE = 'female';
+  var API_BASE_URL = 'https://api-b96ni0d91-blog13.vercel.app';
+  var TTS_VOICE_ID = '6152d1d4-8e30-4847-bf7a-87560bf431e8';
 
   var messages = [
     '今天天气真好~',
@@ -237,7 +237,7 @@
           text: text,
           language: 'Chinese',
           stream: false,
-          voice: TTS_VOICE
+          voice_id: TTS_VOICE_ID
         })
       });
 
