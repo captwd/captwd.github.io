@@ -199,6 +199,160 @@
   }
 }
 
+/* ========== 桌宠对话框 ========== */
+.arkpets-dialog {
+  position: fixed;
+  z-index: 1001;
+  min-width: 110px;
+  max-width: 170px;
+  padding: 14px 20px;
+  background: rgba(255, 255, 255, 0.96);
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.5s ease, transform 0.3s ease;
+  transform: translateX(-50%) translateY(0);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+  border: 2px solid rgba(0, 0, 0, 0.08);
+  border-radius: 32px 32px 32px 12px;
+}
+
+.arkpets-dialog::before {
+  content: '';
+  position: absolute;
+  bottom: -16px;
+  left: 24px;
+  width: 24px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.96);
+  border-right: 2px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0 0 24px 0;
+  transform: rotate(45deg);
+}
+
+.arkpets-dialog::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 14px;
+  width: 14px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.arkpets-dialog-text {
+  font-size: 13px;
+  color: #333;
+  text-align: center;
+  line-height: 1.4;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.arkpets-dialog-text.typing::after {
+  content: '...';
+  animation: typing 1s steps(3) infinite;
+}
+
+@keyframes typing {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+.arkpets-dialog-input-container {
+  display: none;
+  width: 100%;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  gap: 6px;
+  align-items: center;
+}
+
+.arkpets-dialog.chat-mode {
+  min-width: 220px;
+  max-width: 280px;
+  pointer-events: auto;
+}
+
+.arkpets-dialog.chat-mode .arkpets-dialog-text {
+  white-space: normal;
+  max-width: 100%;
+  text-align: left;
+}
+
+.arkpets-dialog.chat-mode .arkpets-dialog-input-container {
+  display: flex;
+}
+
+.arkpets-dialog-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 16px;
+  font-size: 12px;
+  background: rgba(245, 245, 245, 0.8);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.arkpets-dialog-input:focus {
+  border-color: rgba(120, 180, 255, 0.5);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 2px rgba(120, 180, 255, 0.1);
+}
+
+.arkpets-dialog-input::placeholder {
+  color: rgba(0, 0, 0, 0.3);
+}
+
+.arkpets-dialog-send,
+.arkpets-dialog-voice {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(120, 180, 255, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.arkpets-dialog-send:hover,
+.arkpets-dialog-voice:hover {
+  background: rgba(120, 180, 255, 0.3);
+  transform: scale(1.05);
+}
+
+.arkpets-dialog-send:disabled,
+.arkpets-dialog-voice:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.arkpets-dialog-send {
+  font-size: 12px;
+  color: #5a98d4;
+}
+
+.arkpets-dialog-voice {
+  font-size: 13px;
+}
+
 /* 减少动效偏好 */
 @media (prefers-reduced-motion: reduce) {
   #looklook-panel,
