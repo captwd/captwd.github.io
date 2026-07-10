@@ -54,6 +54,16 @@
     dialogBox.id = 'arkpets-dialog';
     dialogBox.className = 'arkpets-dialog';
 
+    for (var i = 0; i < 5; i++) {
+      var cloudShape = document.createElement('div');
+      cloudShape.className = 'cloud-shape';
+      dialogBox.appendChild(cloudShape);
+    }
+
+    var cloudTail = document.createElement('div');
+    cloudTail.className = 'cloud-tail';
+    dialogBox.appendChild(cloudTail);
+
     dialogText = document.createElement('div');
     dialogText.id = 'arkpets-dialog-text';
     dialogText.className = 'arkpets-dialog-text';
@@ -190,6 +200,14 @@
     }
   }
 
+  var offlineResponses = [
+    '抱歉，网络连接有点问题，暂时无法回复~',
+    '现在网络不太好，稍后再试吧！',
+    '哎呀，我好像掉线了...',
+    '网络连接失败，请检查网络设置',
+    '服务器开小差了，稍后再试'
+  ];
+
   async function sendMessage() {
     var text = dialogInput.value.trim();
     if (!text) return;
@@ -205,20 +223,29 @@
 
     chatHistory.push({ role: 'user', content: text });
 
+    var timeoutPromise = new Promise(function(resolve, reject) {
+      setTimeout(function() {
+        reject(new Error('Request timeout'));
+      }, 15000);
+    });
+
+    var fetchPromise = fetch(API_BASE_URL + '/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messages: chatHistory,
+        stream: true
+      }),
+      signal: AbortController ? (new AbortController()).signal : undefined
+    });
+
     try {
-      var response = await fetch(API_BASE_URL + '/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          messages: chatHistory,
-          stream: true
-        })
-      });
+      var response = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (!response.ok) {
-        throw new Error('API request failed');
+        throw new Error('API request failed: ' + response.status);
       }
 
       var reader = response.body.getReader();
@@ -265,7 +292,8 @@
 
     } catch (error) {
       console.error('Chat error:', error);
-      dialogText.textContent = '抱歉，我好像出了点问题...';
+      var offlineMsg = offlineResponses[Math.floor(Math.random() * offlineResponses.length)];
+      dialogText.textContent = offlineMsg;
       dialogText.classList.remove('typing');
     } finally {
       dialogInput.disabled = false;
