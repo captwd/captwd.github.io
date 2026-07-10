@@ -40,6 +40,8 @@
 
   var API_BASE_URL = 'https://api-n6758pb57-blog13.vercel.app';
   var TTS_VOICE_ID = '6152d1d4-8e30-4847-bf7a-87560bf431e8';
+  var API_TIMEOUT = 15000;
+  var isApiAvailable = true;
 
   var messages = [
     '今天天气真好~',
@@ -53,16 +55,6 @@
     dialogBox = document.createElement('div');
     dialogBox.id = 'arkpets-dialog';
     dialogBox.className = 'arkpets-dialog';
-
-    for (var i = 0; i < 5; i++) {
-      var cloudShape = document.createElement('div');
-      cloudShape.className = 'cloud-shape';
-      dialogBox.appendChild(cloudShape);
-    }
-
-    var cloudTail = document.createElement('div');
-    cloudTail.className = 'cloud-tail';
-    dialogBox.appendChild(cloudTail);
 
     dialogText = document.createElement('div');
     dialogText.id = 'arkpets-dialog-text';
@@ -200,17 +192,14 @@
     }
   }
 
-  var offlineResponses = [
-    '抱歉，网络连接有点问题，暂时无法回复~',
-    '现在网络不太好，稍后再试吧！',
-    '哎呀，我好像掉线了...',
-    '网络连接失败，请检查网络设置',
-    '服务器开小差了，稍后再试'
-  ];
-
   async function sendMessage() {
     var text = dialogInput.value.trim();
     if (!text) return;
+
+    if (!isApiAvailable) {
+      dialogText.textContent = '网络连接似乎有问题，请稍后再试~';
+      return;
+    }
 
     dialogInput.value = '';
     dialogInput.disabled = true;
@@ -223,29 +212,34 @@
 
     chatHistory.push({ role: 'user', content: text });
 
-    var timeoutPromise = new Promise(function(resolve, reject) {
-      setTimeout(function() {
-        reject(new Error('Request timeout'));
-      }, 15000);
-    });
-
-    var fetchPromise = fetch(API_BASE_URL + '/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        messages: chatHistory,
-        stream: true
-      }),
-      signal: AbortController ? (new AbortController()).signal : undefined
-    });
+    var abortController = new AbortController();
+    var timeoutId = setTimeout(function() {
+      abortController.abort();
+    }, API_TIMEOUT);
 
     try {
-      var response = await Promise.race([fetchPromise, timeoutPromise]);
+      var response = await fetch(API_BASE_URL + '/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messages: chatHistory,
+          stream: true
+        }),
+        signal: abortController.signal
+      });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error('API request failed: ' + response.status);
+        var errorBody = await response.text();
+        var errorMsg = '服务器返回错误';
+        try {
+          var errorJson = JSON.parse(errorBody);
+          if (errorJson.error) errorMsg = errorJson.error;
+        } catch (e) {}
+        throw new Error(errorMsg);
       }
 
       var reader = response.body.getReader();
@@ -283,6 +277,7 @@
 
       chatHistory.push({ role: 'assistant', content: currentResponse });
       dialogText.classList.remove('typing');
+      isApiAvailable = true;
       
       setTimeout(function() {
         if (currentResponse) {
@@ -291,9 +286,21 @@
       }, 500);
 
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error('Chat error:', error);
-      var offlineMsg = offlineResponses[Math.floor(Math.random() * offlineResponses.length)];
-      dialogText.textContent = offlineMsg;
+      
+      var errorMessage = '抱歉，我好像出了点问题...';
+      if (error.name === 'AbortError') {
+        errorMessage = '网络连接超时了，请稍后再试~';
+        isApiAvailable = false;
+      } else if (error.message && error.message.includes('Failed to fetch')) {
+        errorMessage = '无法连接到服务器，请检查网络~';
+        isApiAvailable = false;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      dialogText.textContent = errorMessage;
       dialogText.classList.remove('typing');
     } finally {
       dialogInput.disabled = false;
@@ -306,6 +313,11 @@
   async function synthesizeSpeech(text) {
     if (!text) return;
 
+    var abortController = new AbortController();
+    var timeoutId = setTimeout(function() {
+      abortController.abort();
+    }, API_TIMEOUT);
+
     try {
       var response = await fetch(API_BASE_URL + '/api/tts', {
         method: 'POST',
@@ -317,11 +329,20 @@
           language: 'Chinese',
           stream: false,
           voice_id: TTS_VOICE_ID
-        })
+        }),
+        signal: abortController.signal
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        throw new Error('TTS request failed');
+        var errorBody = await response.text();
+        var errorMsg = '语音合成失败';
+        try {
+          var errorJson = JSON.parse(errorBody);
+          if (errorJson.error) errorMsg = errorJson.error;
+        } catch (e) {}
+        throw new Error(errorMsg);
       }
 
       var audioBlob = await response.blob();
@@ -349,6 +370,7 @@
         currentAudio.play();
       }
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error('TTS error:', error);
       isSpeaking = false;
       dialogVoiceBtn.innerHTML = '🔊';
@@ -411,6 +433,27 @@
     }
   }
 
+  async function checkApiAvailability() {
+    try {
+      var abortController = new AbortController();
+      var timeoutId = setTimeout(function() {
+        abortController.abort();
+      }, 5000);
+
+      var response = await fetch(API_BASE_URL, {
+        method: 'HEAD',
+        signal: abortController.signal
+      });
+
+      clearTimeout(timeoutId);
+      isApiAvailable = response.ok;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      isApiAvailable = false;
+      console.warn('API health check failed:', error.message);
+    }
+  }
+
   function initArkPets() {
     if (typeof arkpets !== 'undefined' && arkpets.Character) {
       character = new arkpets.Character(
@@ -429,6 +472,7 @@
       setTimeout(function () {
         showPet();
         createDialogBox();
+        checkApiAvailability();
       }, 100);
     } else {
       console.warn('ArkPets not loaded yet, retrying...');
