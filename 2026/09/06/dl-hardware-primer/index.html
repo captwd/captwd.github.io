@@ -1,0 +1,469 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大 | captwd的小窝</title><meta name="author" content="captwd"><meta name="copyright" content="captwd"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="CPU、内存、磁盘、GPU 的物理结构与延迟金字塔：理解深度学习训练瓶颈的硬件视角。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大">
+<meta property="og:url" content="https://captwd.github.io/2026/09/06/dl-hardware-primer/index.html">
+<meta property="og:site_name" content="captwd的小窝">
+<meta property="og:description" content="CPU、内存、磁盘、GPU 的物理结构与延迟金字塔：理解深度学习训练瓶颈的硬件视角。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://captwd.github.io/img/me.png">
+<meta property="article:published_time" content="2026-09-05T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-11T15:03:58.720Z">
+<meta property="article:author" content="captwd">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="性能优化">
+<meta property="article:tag" content="硬件">
+<meta property="article:tag" content="科普">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://captwd.github.io/img/me.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大",
+  "url": "https://captwd.github.io/2026/09/06/dl-hardware-primer/",
+  "image": "https://captwd.github.io/img/me.png",
+  "datePublished": "2026-09-05T16:00:00.000Z",
+  "dateModified": "2026-09-11T15:03:58.720Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "captwd",
+      "url": "https://captwd.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/me.png"><link rel="canonical" href="https://captwd.github.io/2026/09/06/dl-hardware-primer/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.5"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><style>#web_bg { background: transparent !important; }</style><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/mascot/looklook.css"><meta name="generator" content="Hexo 8.1.2"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/me.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">13</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">23</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 文章</span></a></div><div class="menus_item"><a class="site-page" href="/moments/"><i class="fa-fw fas fa-heart"></i><span> 动态</span></a></div><div class="menus_item"><a class="site-page" href="/photos/"><i class="fa-fw fas fa-images"></i><span> 相册</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comments"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/links/"><i class="fa-fw fas fa-link"></i><span> 链接</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/index-bg.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">captwd的小窝</span></a><a class="nav-page-title" href="/"><span class="site-name">硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 文章</span></a></div><div class="menus_item"><a class="site-page" href="/moments/"><i class="fa-fw fas fa-heart"></i><span> 动态</span></a></div><div class="menus_item"><a class="site-page" href="/photos/"><i class="fa-fw fas fa-images"></i><span> 相册</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comments"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/links/"><i class="fa-fw fas fa-link"></i><span> 链接</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-09-05T16:00:00.000Z" title="发表于 2026-09-06 00:00:00">2026-09-06</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-09-11T15:03:58.720Z" title="更新于 2026-09-11 23:03:58">2026-09-11</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E5%AE%9E%E8%B7%B5/">深度学习实践</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><blockquote>
+<p><strong>系列 · Matcha-TTS 训练手记</strong> ｜ <a href="/series/">目录</a> ｜ 上一篇：<a href="/2026/09/05/matcha-tts-windows-training-pitfalls/">Windows 从零训练踩坑全集</a> ｜ 下一篇：<a href="/2026/09/06/what-cpu-gpu-memory-do-during-training/">训练时硬件实况解读</a></p>
+</blockquote>
+<p>训练模型时，你会看到一堆数字：CPU 33%、GPU 46%、内存 85%、磁盘 2%。这些数字背后是一套物理结构在工作。这篇是一份”为深度学习而学”的硬件原理入门——不追踪某台机器的状态，只讲清 CPU、内存、磁盘、GPU 各自为什么长成这样，以及深度学习为什么把它们的特性放大。所有数字按典型消费级硬件给量级。</p>
+<h2 id="0-世界观：延迟金字塔"><a href="#0-世界观：延迟金字塔" class="headerlink" title="0. 世界观：延迟金字塔"></a>0. 世界观：延迟金字塔</h2><p>整台计算机的本质是<strong>一座为速度妥协容量的金字塔</strong>：每往下一层，容量大约 ×10<del>1000，但速度慢 ×10</del>10000。</p>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>延迟</th>
+<th>量级</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>寄存器</td>
+<td>~0.3ns</td>
+<td>字节级</td>
+</tr>
+<tr>
+<td>L1&#x2F;L2 缓存</td>
+<td>1~10ns</td>
+<td>KB~MB</td>
+</tr>
+<tr>
+<td>L3 共享缓存</td>
+<td>10~40ns</td>
+<td>几十 MB</td>
+</tr>
+<tr>
+<td>内存 DRAM</td>
+<td>~100ns</td>
+<td>GB 级</td>
+</tr>
+<tr>
+<td>NVMe SSD</td>
+<td>~0.1ms</td>
+<td>TB 级</td>
+</tr>
+<tr>
+<td>机械硬盘</td>
+<td>~10ms</td>
+<td>TB 级</td>
+</tr>
+</tbody></table>
+<p>换个”人类时间标尺”（把 1 个 CPU 周期放大成 1 秒），差距会非常直观：L1 命中 ≈ 4 秒，L3 ≈ 40 秒，内存 ≈ 5 分钟，SSD ≈ <strong>3.5 天</strong>，机械盘寻道 ≈ <strong>9 个月</strong>，跨洋网络 ≈ <strong>14 年</strong>。</p>
+<p><strong>这就是一切优化故事的根源</strong>：深度学习里”数据搬运”的花费往往超过”计算”本身，因为数据住在这座金字塔的不同楼层。</p>
+<figure>
+  <img src="/img/hw-latency-pyramid.svg" alt="延迟金字塔">
+  <figcaption>延迟金字塔：往下一层，容量约 ×10~1000，速度慢 ×10~10000</figcaption>
+</figure>
+
+<h2 id="1-CPU：一台专为”延迟”优化的机器"><a href="#1-CPU：一台专为”延迟”优化的机器" class="headerlink" title="1. CPU：一台专为”延迟”优化的机器"></a>1. CPU：一台专为”延迟”优化的机器</h2><h3 id="1-1-核心内部"><a href="#1-1-核心内部" class="headerlink" title="1.1 核心内部"></a>1.1 核心内部</h3><p>一个 CPU 核心是五段流水线：取指 → 解码 → 乱序调度 → 执行 → 写回，配套多级缓存：L1（32KB 指令 + 32KB 数据，每核私有，<del>4 周期）、L2（</del>1MB，<del>12 周期）、L3（几十 MB，全核共享，</del>40 周期）。</p>
+<p>关键概念：<strong>缓存行（cache line）64 字节，数据按整块搬运</strong>——这就是”顺序访问快、跳跃访问慢”的物理根源。CPU 设计的全部魔法，都是在”预测并提前把数据搬到楼上”。</p>
+<figure>
+  <img src="/img/hw-cpu-core.svg" alt="CPU 核心结构">
+  <figcaption>CPU 核心：五段流水线 + 乱序执行 + 多级缓存（频率远不代表性能）</figcaption>
+</figure>
+
+<h3 id="1-2-四个决定性能的词"><a href="#1-2-四个决定性能的词" class="headerlink" title="1.2 四个决定性能的词"></a>1.2 四个决定性能的词</h3><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>一句话原理</th>
+<th>对训练的含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>频率 GHz</td>
+<td>每秒时钟节拍；节拍 ≠ 完成一条指令</td>
+<td>笔记本会按温度&#x2F;负载动态升降（throttling）</td>
+</tr>
+<tr>
+<td>IPC × 频率 × 核数</td>
+<td>性能三者缺一不可</td>
+<td>Python 循环 IPC 很低，主进程”忙”但产出少</td>
+</tr>
+<tr>
+<td>SMT 超线程</td>
+<td>一个物理核伪装成 2 个逻辑线程</td>
+<td>16 线程 &#x3D; 8 物理核；33% 利用率 ≈ 5 线程真在干活</td>
+</tr>
+<tr>
+<td>SIMD 向量</td>
+<td>一条 AVX 指令处理 8~16 个浮点</td>
+<td>NumPy&#x2F;torch 的 CPU 算子靠它加速</td>
+</tr>
+</tbody></table>
+<h3 id="1-3-“CPU-利用率-33-”-到底在量什么"><a href="#1-3-“CPU-利用率-33-”-到底在量什么" class="headerlink" title="1.3 “CPU 利用率 33%” 到底在量什么"></a>1.3 “CPU 利用率 33%” 到底在量什么</h3><p>操作系统每秒采样数百次，统计”<strong>有任务可跑的核心·时间 ÷ 总核心·时间</strong>“。所以 33% 的意思是：采样时刻平均只有 1&#x2F;3 的核心有活干。它<strong>不衡量这些活的含金量</strong>（一个忙等循环也能 100%）。深度学习训练里 CPU 大部分等待来自：<strong>等 GPU 同步、等数据、等锁（GIL）</strong>。</p>
+<h2 id="2-内存：工作台与虚拟内存的戏法"><a href="#2-内存：工作台与虚拟内存的戏法" class="headerlink" title="2. 内存：工作台与虚拟内存的戏法"></a>2. 内存：工作台与虚拟内存的戏法</h2><h3 id="2-1-物理本质"><a href="#2-1-物理本质" class="headerlink" title="2.1 物理本质"></a>2.1 物理本质</h3><p>每比特是一个<strong>微型电容</strong>（有电&#x3D;1，没电&#x3D;0）。电容会漏电，所以每隔约 64ms 必须整行刷新——这就是”易失性”和断电丢数据的由来。带宽 &#x3D; 频率 × 位宽 × 通道数（DDR5-5600 双通道 ≈ 89GB&#x2F;s）。</p>
+<h3 id="2-2-虚拟内存"><a href="#2-2-虚拟内存" class="headerlink" title="2.2 虚拟内存"></a>2.2 虚拟内存</h3><p>程序看到的地址是假的：进程有独立的虚拟地址空间，MMU + TLB 负责翻译成物理地址。</p>
+<ul>
+<li>TLB 命中 → 翻译 ~1 周期</li>
+<li>TLB 未中 → 查页表（多次访存）</li>
+<li>缺页（Major）→ 读磁盘（ms 级）</li>
+</ul>
+<p><strong>换页（swap&#x2F;pagefile）</strong>：内存吃紧时，系统把冷页写回磁盘腾地方——之后每次访问都慢 10⁵ 倍。”内存不足”的真实过程就是：分配失败&#x2F;换页 → 冷页写盘 → 任务管理器里”已提交”飙升。</p>
+<figure>
+  <img src="/img/hw-virtual-memory.svg" alt="虚拟内存机制">
+  <figcaption>虚拟内存：MMU + TLB 翻译、缺页异常、页缓存与换页</figcaption>
+</figure>
+
+<h3 id="2-3-页缓存：为什么第二次读文件几乎不花时间"><a href="#2-3-页缓存：为什么第二次读文件几乎不花时间" class="headerlink" title="2.3 页缓存：为什么第二次读文件几乎不花时间"></a>2.3 页缓存：为什么第二次读文件几乎不花时间</h3><p>OS 会把读写过的文件内容<strong>自动留在空闲内存</strong>里（Windows 叫 standby list，Linux 叫 page cache）。这是”空闲内存的聪明用法”，需要时立刻让位。数据集第一次读进内存后，之后每个 epoch 都是纯内存命中——这就是”读一次数据，整晚训练磁盘都退休”的原理。</p>
+<h3 id="2-4-锁页内存（pinned）"><a href="#2-4-锁页内存（pinned）" class="headerlink" title="2.4 锁页内存（pinned）"></a>2.4 锁页内存（pinned）</h3><p>普通内存可能被换出，DMA 引擎不敢直接拿它做异步拷贝（数据可能中途消失）。<strong>锁页内存 &#x3D; 向 OS 承诺”绝不换出”</strong>，于是 GPU 的 DMA 可以安全异步直读。PyTorch 的 <code>pin_memory=True</code> 就是在干这个。代价是锁死的页会<strong>加剧</strong>内存压力（不能当缓存用），一把双刃剑。</p>
+<h2 id="3-磁盘：SSD-的”改写为什么这么麻烦”"><a href="#3-磁盘：SSD-的”改写为什么这么麻烦”" class="headerlink" title="3. 磁盘：SSD 的”改写为什么这么麻烦”"></a>3. 磁盘：SSD 的”改写为什么这么麻烦”</h2><h3 id="3-1-机械盘-vs-固态盘"><a href="#3-1-机械盘-vs-固态盘" class="headerlink" title="3.1 机械盘 vs 固态盘"></a>3.1 机械盘 vs 固态盘</h3><table>
+<thead>
+<tr>
+<th></th>
+<th>HDD</th>
+<th>SSD</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>介质</td>
+<td>磁性盘片 + 磁头机械寻道</td>
+<td>NAND 闪存（电子囚禁在浮栅）</td>
+</tr>
+<tr>
+<td>随机访问</td>
+<td>5~10ms（机械运动！）</td>
+<td>0.02~0.1ms</td>
+</tr>
+<tr>
+<td>顺序带宽</td>
+<td>150~250MB&#x2F;s（SATA）</td>
+<td>NVMe 2~7GB&#x2F;s</td>
+</tr>
+<tr>
+<td>寿命</td>
+<td>机械磨损</td>
+<td>每单元擦写次数有限（TLC ~1000-3000 次）</td>
+</tr>
+</tbody></table>
+<h3 id="3-2-NAND-的两个别扭特性（SSD-一切怪行为的根源）"><a href="#3-2-NAND-的两个别扭特性（SSD-一切怪行为的根源）" class="headerlink" title="3.2 NAND 的两个别扭特性（SSD 一切怪行为的根源）"></a>3.2 NAND 的两个别扭特性（SSD 一切怪行为的根源）</h3><ol>
+<li><strong>读&#x2F;写按”页”（4~16KB）</strong></li>
+<li><strong>擦除按”块”（&#x3D; 几百个页一起）</strong></li>
+</ol>
+<p>同一页要写第二次，必须先擦掉整个块。于是 SSD 内部有个”翻译官” <strong>FTL（闪存转换层）</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">你改写 4KB → 不敢原地擦（要拖上几百页）</span><br><span class="line">  → 把新数据写到别的空页，改映射表</span><br><span class="line">  → 旧页标记垃圾，攒多了后台回收（GC）</span><br><span class="line">  → 副作用：写入放大（实际写 &gt; 你写的）、掉速</span><br><span class="line">  → 磨损均衡：FTL 故意把擦写摊到全盘所有块</span><br></pre></td></tr></table></figure>
+
+<p>“SSD 写多了变慢”和”寿命”都源于此。</p>
+<figure>
+  <img src="/img/hw-nand-ftl.svg" alt="NAND 页块模型与 FTL">
+  <figcaption>NAND 的页/块模型与 FTL：写入放大、垃圾回收与磨损均衡的根源</figcaption>
+</figure>
+
+<h3 id="3-3-NVMe-比-SATA-快在哪"><a href="#3-3-NVMe-比-SATA-快在哪" class="headerlink" title="3.3 NVMe 比 SATA 快在哪"></a>3.3 NVMe 比 SATA 快在哪</h3><p>SATA&#x2F;AHCI 只有 <strong>1 条命令队列、深度 32</strong>；NVMe 走 PCIe 直连，支持 <strong>64000 条队列、每条 64000 深</strong>——并行度差三个数量级。训练的启示：checkpoint 是大块顺序写（NVMe 强项）；数据集尽量顺序大块读，别每条样本一次小 IO。</p>
+<h2 id="4-GPU：一台专为”吞吐量”优化的机器"><a href="#4-GPU：一台专为”吞吐量”优化的机器" class="headerlink" title="4. GPU：一台专为”吞吐量”优化的机器"></a>4. GPU：一台专为”吞吐量”优化的机器</h2><h3 id="4-1-哲学差异"><a href="#4-1-哲学差异" class="headerlink" title="4.1 哲学差异"></a>4.1 哲学差异</h3><table>
+<thead>
+<tr>
+<th></th>
+<th>CPU（4 个教授）</th>
+<th>GPU（一个礼堂的学生）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>核心</td>
+<td>少量超强核心、乱序、分支预测、大缓存</td>
+<td>几千个简单核心</td>
+</tr>
+<tr>
+<td>目标</td>
+<td>单任务<strong>延迟</strong>最小</td>
+<td>总<strong>吞吐量</strong>最大</td>
+</tr>
+<tr>
+<td>擅长</td>
+<td>复杂逻辑、分支、串行依赖</td>
+<td>海量同构小计算（矩阵乘法！）</td>
+</tr>
+<tr>
+<td>弱点</td>
+<td>并行任务多时启动开销高</td>
+<td>分支发散即空转</td>
+</tr>
+</tbody></table>
+<p>神经网络训练 &#x3D; 巨量矩阵乘 &#x3D; GPU 主场；Python 循环、数据整理 &#x3D; CPU 主场。</p>
+<figure>
+  <img src="/img/hw-cpu-vs-gpu.svg" alt="CPU vs GPU">
+  <figcaption>CPU（延迟优化）vs GPU（吞吐优化）</figcaption>
+</figure>
+
+<h3 id="4-2-SM、warp-与延迟隐藏"><a href="#4-2-SM、warp-与延迟隐藏" class="headerlink" title="4.2 SM、warp 与延迟隐藏"></a>4.2 SM、warp 与延迟隐藏</h3><p>GPU 的最小调度单位是 <strong>warp（32 个线程绑在一起，SIMT）</strong>。每个 SM 同时驻留几十个 warp；当一个 warp 在等显存数据（几百周期）时，调度器<strong>立刻切到另一个就绪 warp</strong> 继续算——用海量切换把访存延迟藏起来，这叫<strong>延迟隐藏</strong>，是 GPU 编程的灵魂。</p>
+<p>推论：如果驻留的 warp 太少（<strong>occupancy 低</strong>，比如 batch 只有 32），没有”备胎 warp”可切，GPU 只能干等 → 利用率低。这就是”小 batch 喂不饱 GPU”的架构层解释。</p>
+<p>显存侧同样分层：寄存器 → 共享内存&#x2F;L1 → L2 → GDDR&#x2F;HBM（~300+GB&#x2F;s，几百周期）。访存连续（coalesced）时带宽才能打满——张量的内存布局之所以重要就在这。</p>
+<h3 id="4-3-拷贝引擎：让”搬家”和”计算”同时进行"><a href="#4-3-拷贝引擎：让”搬家”和”计算”同时进行" class="headerlink" title="4.3 拷贝引擎：让”搬家”和”计算”同时进行"></a>4.3 拷贝引擎：让”搬家”和”计算”同时进行</h3><p>GPU 里有独立的 <strong>DMA 拷贝引擎</strong>，所以”上一批在算”和”下一批在拷”可以并行——这就是数据预取（prefetch）能提高 GPU 利用率的硬件基础。前提：源内存必须 pinned。</p>
+<h2 id="5-串起来：一次-H2D-拷贝的完整旅程"><a href="#5-串起来：一次-H2D-拷贝的完整旅程" class="headerlink" title="5. 串起来：一次 H2D 拷贝的完整旅程"></a>5. 串起来：一次 H2D 拷贝的完整旅程</h2><p>以 <code>batch.to(device)</code> 这一行为例：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">① Python 调用</span><br><span class="line">② PyTorch C++ 层把张量指针交给驱动</span><br><span class="line">③ 驱动向 GPU 拷贝引擎提交 DMA 命令</span><br><span class="line">④ PCIe 传输（数据须来自 pinned 页，否则先要 CPU 搬运 staging）</span><br><span class="line">⑤ 拷贝完成触发中断</span><br><span class="line">⑥ 驱动通知 CUDA 流&quot;事件完成&quot;</span><br><span class="line">⑦ 同流里的后续 kernel 才开始执行</span><br></pre></td></tr></table></figure>
+
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>参与硬件</th>
+<th>典型耗时</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>命令提交</td>
+<td>CPU + 系统调用 + 驱动</td>
+<td>~10µs 级（每次发射的固定开销）</td>
+</tr>
+<tr>
+<td>PCIe 传输</td>
+<td>DMA 引擎 + PCIe</td>
+<td>毫秒级（几 MB ÷ 16GB&#x2F;s）</td>
+</tr>
+<tr>
+<td>kernel 计算</td>
+<td>SM 阵列</td>
+<td>视模型，毫秒~几十毫秒</td>
+</tr>
+</tbody></table>
+<p><strong>全局图景</strong>：训练就是在”延迟阶梯”上反复搬数据，同时让 GPU 的吞吐机器别停。你做过的每个优化都能在这张地图上找到坐标——<strong>把数据搬到离计算最近的一层，或者让搬运与计算重叠</strong>。</p>
+<h2 id="6-继续深入"><a href="#6-继续深入" class="headerlink" title="6. 继续深入"></a>6. 继续深入</h2><table>
+<thead>
+<tr>
+<th>资源</th>
+<th>学什么</th>
+<th>难度</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>《深入理解计算机系统》第 1&#x2F;5&#x2F;6&#x2F;9 章</td>
+<td>缓存、虚拟内存、链接、系统级 IO</td>
+<td>★★</td>
+</tr>
+<tr>
+<td>CMU 15-213 公开课</td>
+<td>CSAPP 配套，Lab 质量极高</td>
+<td>★★</td>
+</tr>
+<tr>
+<td>《What Every Programmer Should Know About Memory》</td>
+<td>内存子系统最深度长文</td>
+<td>★★★★</td>
+</tr>
+<tr>
+<td>《Programming Massively Parallel Processors》第 4 版</td>
+<td>GPU 架构与 CUDA 圣经</td>
+<td>★★★</td>
+</tr>
+<tr>
+<td>CUDA C++ Programming Guide 第 2 章 + Best Practices</td>
+<td>kernel、流、拷贝引擎</td>
+<td>★★★</td>
+</tr>
+</tbody></table>
+<hr>
+<p><em>下一篇：把这套原理映射到真实训练画面上——CPU 33% &#x2F; 内存 85% &#x2F; 磁盘 2% &#x2F; GPU 46% 分别在说什么。</em></p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://captwd.github.io">captwd</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://captwd.github.io/2026/09/06/dl-hardware-primer/">https://captwd.github.io/2026/09/06/dl-hardware-primer/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://captwd.github.io" target="_blank">captwd的小窝</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E7%A1%AC%E4%BB%B6/">硬件</a><a class="post-meta__tags" href="/tags/GPU/">GPU</a><a class="post-meta__tags" href="/tags/%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96/">性能优化</a><a class="post-meta__tags" href="/tags/%E7%A7%91%E6%99%AE/">科普</a></div><div class="post-share"><div class="social-share" data-image="/img/me.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/09/06/matcha-tts-vocoder-registry-metrics-and-demo/" title="工程改造三件套：声码器注册表、评价指标体系与静态 Demo 页"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">工程改造三件套：声码器注册表、评价指标体系与静态 Demo 页</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：PyTorch 参数解剖 ｜ 下一篇：ConvNeXt V2 与 MCD 震荡机制  模型训练之外，”怎么优雅地换声码器””怎么客观评价合成质量””怎么展示结果”这三件事同样值得工程化。这篇记录对 Matcha-TTS 做的三项改造：注册表重构、MCD&#x2F;WER&#x2F;CER 评价体系、以及一个纯静态试听 Demo 页。 一、声码器注册表：加新声码器只加文件问题原版推理框架里，声码器的加载是 if/else 硬编码。每接一个新声码器（HiFi-GAN 的各个版本、BigVGAN……）都要去改 cli.py 的主流程，越改越乱。 方案：装饰器注册表12345678# matcha/vocoders/__init__.py@register_vocoder(&quot;hifigan_T2_v1&quot;)def load_hifigan_t2(ckpt, device):    ...    return vocoder, denoiserdef load_vocoder(name, ckpt, dev...</div></div></div></a><a class="pagination-related" href="/2026/09/05/matcha-tts-windows-training-pitfalls/" title="Windows 从零训练 Matcha-TTS 的踩坑全集"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">Windows 从零训练 Matcha-TTS 的踩坑全集</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：离线预处理缓存方案 ｜ 下一篇：硬件原理入门  这是整个 Matcha-TTS 训练手记的第一篇：在一台 RTX 5060 Laptop（8GB 显存）+ 16GB 内存的 Windows 笔记本上，从克隆代码到第一次成功合成语音，踩过的坑和它们的解法。后来项目迁移到了 WSL2 并用上了 Mamba 骨干（另有专题），但这一篇里的坑大多是平台无关的，值得单独记录。 一、安装与环境1. 装什么、怎么装代码 clone 到本地即可，不需要 pip install git+...；只需要在仓库根目录 pip install -e .，作用是：装依赖 + 编译 Cython 对齐模块 + 注册命令行工具。国内网络建议换清华源，必要时配 --no-build-isolation。 2. 缺 MSVC 编译器，Cython 模块编译失败1error: Microsoft Visual C++ 14.0 or greater is required  matcha.utils.monotonic_align.core 是 Cy...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/09/06/what-cpu-gpu-memory-do-during-training/" title="训练时 CPU、内存、磁盘、GPU 都在干什么：一次实测画面的逐项解读"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-06</div><div class="info-item-2">训练时 CPU、内存、磁盘、GPU 都在干什么：一次实测画面的逐项解读</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：硬件原理入门 ｜ 下一篇：PyTorch 参数解剖  上一篇讲了原理，这一篇是应用：拿一次真实训练的监测画面，逐项解释每个数字背后的流水线状态。画面快照（Windows 训练、有效 batch 64 时代）： 1234CPU   33% @3.19GHz内存  12.9 / 15.2GB (85%)磁盘  2%GPU   46%（专用显存 7.6GB）  配套的流水线是：离线预处理缓存 + 梯度累积 + num_workers + pinned memory + 每 epoch 存 258MB checkpoint。结论先给：瓶颈不是某个设备的算力，而是”链路延迟”——四部件都半闲。 1. 一条数据的完整旅程12345678910111213141516171819磁盘(NVMe, 2%)  └ 离线缓存 .npy / phonemes.json（首轮读一次，之后进页缓存）  └ 每 epoch 末：写 258MB checkpoint + tensorboard 追加事件        ↓内存(12.9/15.2...</div></div></div></a><a class="pagination-related" href="/2026/09/06/pytorch-tensor-parameters-and-checkpoint-anatomy/" title="PyTorch 参数解剖：从 Tensor 内存布局到 258MB checkpoint 的精确账本"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-06</div><div class="info-item-2">PyTorch 参数解剖：从 Tensor 内存布局到 258MB checkpoint 的精确账本</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：训练时硬件实况解读 ｜ 下一篇：声码器注册表与评估体系  训练时显存里到底住了什么？checkpoint 为什么恰好是某个大小？换骨干为什么不能热迁移权重？这篇用本项目的真实数字（MatchaTTS + ConvNeXt V2 变体，全模型 22.5M 参数 &#x3D; encoder 7.2M + decoder 15.3M）把这些问题一次讲清。所有数字来自 torchinfo 参数表和 checkpoint 逐键字节统计。 1. 最底层：一个 Tensor 是什么每个张量由两部分组成：  元数据（轻量，几百字节）：shape、stride、dtype、device、requires_grad Storage（真正连续的字节缓冲，可被多个张量共享）  12x : Tensor (元数据 ~几百 B, shape=[256,172], f32, cuda:0)  storage ──→ 一整块连续内存: 256 × 172 × 4B ≈ 176 KB  x.view()、x[:, 10] 这类操作不复制数据，只新...</div></div></div></a><a class="pagination-related" href="/2026/09/04/offline-preprocessing-cache-for-tts-training/" title="离线预处理缓存：让 TTS 训练每轮提速一倍的自制方案"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-04</div><div class="info-item-2">离线预处理缓存：让 TTS 训练每轮提速一倍的自制方案</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 下一篇：Windows 从零训练踩坑全集  训练一个语音模型时，最容易被忽视的浪费是：每个 epoch 都把同一批音频重新算一遍梅尔谱、重新做一遍音素化。这个项目里 13100 条 LJSpeech 数据，每轮训练都要在 CPU 上重复上千次 FFT 和调用 espeak，纯属内耗。这篇记录我做的离线预处理缓存方案：思路、实现、验证和收益。 一、问题：训练循环里藏着一个重复劳动原始 Matcha-TTS 的数据管线是这样的（每个 epoch、每条样本）： 1234读 wav → 短时傅里叶变换 → mel 滤波器组 → 取对数  (CPU 密集)文本 → 清洗/规范化 → espeak 音素化              (调用外部进程，慢)        ↓    collate 变长序列补零 → 送 GPU  而这两步的输入是确定性的——同一批数据、同一套参数，结果永远一样。在 GPU 上训练时，CPU 还在为下一批数据”现磨”这些特征，直接后果是：  每轮训练时间被拉长（数据准备和 GPU 计算争抢） CPU 利用率下...</div></div></div></a></div></div><hr class="custom-hr"/><div id="post-comment"><div class="comment-head"><div class="comment-headline"><i class="fas fa-comments fa-fw"></i><span> 评论</span></div></div><div class="comment-wrap"><div><div id="waline-wrap"></div></div></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/me.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">captwd</div><div class="author-info-description"></div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">13</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">23</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/xxxxxx"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/captwd" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a><a class="social-icon" href="mailto:3498376281@qq.com" target="_blank" title="Email"><i class="fas fa-envelope" style="color: #4a7dbe;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">欢迎！</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#0-%E4%B8%96%E7%95%8C%E8%A7%82%EF%BC%9A%E5%BB%B6%E8%BF%9F%E9%87%91%E5%AD%97%E5%A1%94"><span class="toc-number">1.</span> <span class="toc-text">0. 世界观：延迟金字塔</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#1-CPU%EF%BC%9A%E4%B8%80%E5%8F%B0%E4%B8%93%E4%B8%BA%E2%80%9D%E5%BB%B6%E8%BF%9F%E2%80%9D%E4%BC%98%E5%8C%96%E7%9A%84%E6%9C%BA%E5%99%A8"><span class="toc-number">2.</span> <span class="toc-text">1. CPU：一台专为”延迟”优化的机器</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-1-%E6%A0%B8%E5%BF%83%E5%86%85%E9%83%A8"><span class="toc-number">2.1.</span> <span class="toc-text">1.1 核心内部</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-2-%E5%9B%9B%E4%B8%AA%E5%86%B3%E5%AE%9A%E6%80%A7%E8%83%BD%E7%9A%84%E8%AF%8D"><span class="toc-number">2.2.</span> <span class="toc-text">1.2 四个决定性能的词</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-3-%E2%80%9CCPU-%E5%88%A9%E7%94%A8%E7%8E%87-33-%E2%80%9D-%E5%88%B0%E5%BA%95%E5%9C%A8%E9%87%8F%E4%BB%80%E4%B9%88"><span class="toc-number">2.3.</span> <span class="toc-text">1.3 “CPU 利用率 33%” 到底在量什么</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-%E5%86%85%E5%AD%98%EF%BC%9A%E5%B7%A5%E4%BD%9C%E5%8F%B0%E4%B8%8E%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98%E7%9A%84%E6%88%8F%E6%B3%95"><span class="toc-number">3.</span> <span class="toc-text">2. 内存：工作台与虚拟内存的戏法</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#2-1-%E7%89%A9%E7%90%86%E6%9C%AC%E8%B4%A8"><span class="toc-number">3.1.</span> <span class="toc-text">2.1 物理本质</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-%E8%99%9A%E6%8B%9F%E5%86%85%E5%AD%98"><span class="toc-number">3.2.</span> <span class="toc-text">2.2 虚拟内存</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-3-%E9%A1%B5%E7%BC%93%E5%AD%98%EF%BC%9A%E4%B8%BA%E4%BB%80%E4%B9%88%E7%AC%AC%E4%BA%8C%E6%AC%A1%E8%AF%BB%E6%96%87%E4%BB%B6%E5%87%A0%E4%B9%8E%E4%B8%8D%E8%8A%B1%E6%97%B6%E9%97%B4"><span class="toc-number">3.3.</span> <span class="toc-text">2.3 页缓存：为什么第二次读文件几乎不花时间</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-4-%E9%94%81%E9%A1%B5%E5%86%85%E5%AD%98%EF%BC%88pinned%EF%BC%89"><span class="toc-number">3.4.</span> <span class="toc-text">2.4 锁页内存（pinned）</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-%E7%A3%81%E7%9B%98%EF%BC%9ASSD-%E7%9A%84%E2%80%9D%E6%94%B9%E5%86%99%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%99%E4%B9%88%E9%BA%BB%E7%83%A6%E2%80%9D"><span class="toc-number">4.</span> <span class="toc-text">3. 磁盘：SSD 的”改写为什么这么麻烦”</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#3-1-%E6%9C%BA%E6%A2%B0%E7%9B%98-vs-%E5%9B%BA%E6%80%81%E7%9B%98"><span class="toc-number">4.1.</span> <span class="toc-text">3.1 机械盘 vs 固态盘</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-2-NAND-%E7%9A%84%E4%B8%A4%E4%B8%AA%E5%88%AB%E6%89%AD%E7%89%B9%E6%80%A7%EF%BC%88SSD-%E4%B8%80%E5%88%87%E6%80%AA%E8%A1%8C%E4%B8%BA%E7%9A%84%E6%A0%B9%E6%BA%90%EF%BC%89"><span class="toc-number">4.2.</span> <span class="toc-text">3.2 NAND 的两个别扭特性（SSD 一切怪行为的根源）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-3-NVMe-%E6%AF%94-SATA-%E5%BF%AB%E5%9C%A8%E5%93%AA"><span class="toc-number">4.3.</span> <span class="toc-text">3.3 NVMe 比 SATA 快在哪</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-GPU%EF%BC%9A%E4%B8%80%E5%8F%B0%E4%B8%93%E4%B8%BA%E2%80%9D%E5%90%9E%E5%90%90%E9%87%8F%E2%80%9D%E4%BC%98%E5%8C%96%E7%9A%84%E6%9C%BA%E5%99%A8"><span class="toc-number">5.</span> <span class="toc-text">4. GPU：一台专为”吞吐量”优化的机器</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#4-1-%E5%93%B2%E5%AD%A6%E5%B7%AE%E5%BC%82"><span class="toc-number">5.1.</span> <span class="toc-text">4.1 哲学差异</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-2-SM%E3%80%81warp-%E4%B8%8E%E5%BB%B6%E8%BF%9F%E9%9A%90%E8%97%8F"><span class="toc-number">5.2.</span> <span class="toc-text">4.2 SM、warp 与延迟隐藏</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-3-%E6%8B%B7%E8%B4%9D%E5%BC%95%E6%93%8E%EF%BC%9A%E8%AE%A9%E2%80%9D%E6%90%AC%E5%AE%B6%E2%80%9D%E5%92%8C%E2%80%9D%E8%AE%A1%E7%AE%97%E2%80%9D%E5%90%8C%E6%97%B6%E8%BF%9B%E8%A1%8C"><span class="toc-number">5.3.</span> <span class="toc-text">4.3 拷贝引擎：让”搬家”和”计算”同时进行</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-%E4%B8%B2%E8%B5%B7%E6%9D%A5%EF%BC%9A%E4%B8%80%E6%AC%A1-H2D-%E6%8B%B7%E8%B4%9D%E7%9A%84%E5%AE%8C%E6%95%B4%E6%97%85%E7%A8%8B"><span class="toc-number">6.</span> <span class="toc-text">5. 串起来：一次 H2D 拷贝的完整旅程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-%E7%BB%A7%E7%BB%AD%E6%B7%B1%E5%85%A5"><span class="toc-number">7.</span> <span class="toc-text">6. 继续深入</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/11/fair-evaluation-for-backbone-swap/" title="换骨干实验怎么做才公平：MCD 标定、协议统一与配对检验">换骨干实验怎么做才公平：MCD 标定、协议统一与配对检验</a><time datetime="2026-09-10T16:00:00.000Z" title="发表于 2026-09-11 00:00:00">2026-09-11</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/11/integrate-bidirectional-mamba2-into-matcha-tts/" title="把双向 Mamba2 换进 Matcha-TTS 的 U-Net：设计、陷阱与验证">把双向 Mamba2 换进 Matcha-TTS 的 U-Net：设计、陷阱与验证</a><time datetime="2026-09-10T16:00:00.000Z" title="发表于 2026-09-11 00:00:00">2026-09-11</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/11/migrate-matcha-tts-to-wsl-and-install-mamba-ssm/" title="从 Windows 到 WSL2：一次 TTS 训练迁移与 mamba-ssm 安装实录">从 Windows 到 WSL2：一次 TTS 训练迁移与 mamba-ssm 安装实录</a><time datetime="2026-09-10T16:00:00.000Z" title="发表于 2026-09-11 00:00:00">2026-09-11</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/07/convnext-v2-and-lr-decay-experiment/" title="换掉 U-Net 的卷积块：ConvNeXt V2 实验与一次 MCD 震荡的机制归因">换掉 U-Net 的卷积块：ConvNeXt V2 实验与一次 MCD 震荡的机制归因</a><time datetime="2026-09-06T16:00:00.000Z" title="发表于 2026-09-07 00:00:00">2026-09-07</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/06/dl-hardware-primer/" title="硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大">硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大</a><time datetime="2026-09-05T16:00:00.000Z" title="发表于 2026-09-06 00:00:00">2026-09-06</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By captwd</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.2</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.5</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><a id="to_comment" href="#post-comment" title="前往评论"><i class="fas fa-comments"></i></a><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.5"></script><script src="/js/main.js?v=5.5.5"></script><div class="js-pjax"><script>(() => {
+  let initFn = window.walineFn || null
+  const isShuoshuo = GLOBAL_CONFIG_SITE.pageType === 'shuoshuo'
+  const option = null
+
+  const destroyWaline = ele => ele.destroy()
+
+  const initWaline = (Fn, el = document, path = window.location.pathname) => {
+    const waline = Fn({
+      el: el.querySelector('#waline-wrap'),
+      serverURL: '',
+      pageview: false,
+      dark: 'html[data-theme="dark"]',
+      comment: false,
+      ...option,
+      path: isShuoshuo ? path : (option && option.path) || path
+    })
+
+    if (isShuoshuo) {
+      window.shuoshuoComment.destroyWaline = () => {
+        destroyWaline(waline)
+        if (el.children.length) {
+          el.innerHTML = ''
+          el.classList.add('no-comment')
+        }
+      }
+    }
+  }
+
+  const loadWaline = (el, path) => {
+    if (initFn) initWaline(initFn, el, path)
+    else {
+      btf.getCSS('https://cdn.jsdelivr.net/npm/@waline/client@3.15.2/dist/waline.min.css')
+        .then(() => import('https://cdn.jsdelivr.net/npm/@waline/client@3.15.2/dist/waline.min.js'))
+        .then(({ init }) => {
+          initFn = init || Waline.init
+          initWaline(initFn, el, path)
+          window.walineFn = initFn
+        })
+    }
+  }
+
+  if (isShuoshuo) {
+    'Waline' === 'Waline'
+      ? window.shuoshuoComment = { loadComment: loadWaline } 
+      : window.loadOtherComment = loadWaline
+    return
+  }
+
+  if ('Waline' === 'Waline' || !false) {
+    if (false) btf.loadComment(document.getElementById('waline-wrap'),loadWaline)
+    else setTimeout(loadWaline, 0)
+  } else {
+    window.loadOtherComment = loadWaline
+  }
+})()</script></div><video autoplay loop muted playsinline style="position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:-999;opacity:0.8;pointer-events:none;"><source src="/video/live.mp4" type="video/mp4"></video><script src="/mascot/looklook.js"></script><script src="/mascot/arkpets/arkpets.js"></script><script src="/mascot/arkpets/arkpets-init.js"></script><script id="click-heart" src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/dist/click-heart.min.js" async="async" mobile="false"></script><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>

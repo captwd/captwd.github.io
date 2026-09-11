@@ -1,0 +1,35 @@
+<svg viewBox="0 0 940 360" xmlns="http://www.w3.org/2000/svg">
+  <text x="470" y="30" text-anchor="middle" font-size="14" font-weight="bold" fill="#14573c">优化器步 1 次 = 微批次 ×2</text>
+  <!-- micro batch 1 -->
+  <rect x="20" y="50" width="440" height="130" rx="10" fill="#f7faf8" stroke="#1e7a55"/>
+  <text x="240" y="72" text-anchor="middle" font-size="13" fill="#14573c" font-weight="bold">微批次 ①（32 个样本）</text>
+  <g font-size="12">
+    <rect x="40" y="86" width="120" height="34" rx="6" fill="#fff" stroke="#2563ab"/><text x="100" y="108" text-anchor="middle">H2D 拷贝（pinned）</text>
+    <rect x="180" y="86" width="120" height="34" rx="6" fill="#fff" stroke="#1e7a55"/><text x="240" y="108" text-anchor="middle">★前向 autocast fp16</text>
+    <rect x="320" y="86" width="120" height="34" rx="6" fill="#fff" stroke="#c0392b"/><text x="380" y="108" text-anchor="middle">★反向（×scale）</text>
+  </g>
+  <text x="240" y="150" text-anchor="middle" font-size="11.5" fill="#666">loss.backward()：.grad += 缩放后的梯度（不清零，不 step）</text>
+  <text x="240" y="168" text-anchor="middle" font-size="11.5" fill="#666">激活随图释放 → 只有 .grad 攒着（小）</text>
+
+  <!-- micro batch 2 -->
+  <rect x="480" y="50" width="440" height="130" rx="10" fill="#f7faf8" stroke="#1e7a55"/>
+  <text x="700" y="72" text-anchor="middle" font-size="13" fill="#14573c" font-weight="bold">微批次 ②（同上再来一遍）</text>
+  <g font-size="12">
+    <rect x="500" y="86" width="120" height="34" rx="6" fill="#fff" stroke="#2563ab"/><text x="560" y="108" text-anchor="middle">H2D 拷贝（pinned）</text>
+    <rect x="640" y="86" width="120" height="34" rx="6" fill="#fff" stroke="#1e7a55"/><text x="700" y="108" text-anchor="middle">★前向 autocast fp16</text>
+    <rect x="780" y="86" width="120" height="34" rx="6" fill="#fff" stroke="#c0392b"/><text x="840" y="108" text-anchor="middle">★反向（×scale）</text>
+  </g>
+  <text x="700" y="150" text-anchor="middle" font-size="11.5" fill="#666">.grad 现在持有“两个 32 样本微批之和”≈ batch64 的梯度</text>
+  <text x="700" y="168" text-anchor="middle" font-size="11.5" fill="#666">至此累计 64 个样本的信息，尚未更新任何参数</text>
+
+  <!-- accumulation boundary -->
+  <rect x="120" y="210" width="700" height="130" rx="10" fill="#fdf3e7" stroke="#b7791f"/>
+  <text x="470" y="234" text-anchor="middle" font-size="13" fill="#b7791f" font-weight="bold">累积边界（第 2 个微批之后）——只有这里动参数</text>
+  <g font-size="12">
+    <rect x="145" y="252" width="180" height="34" rx="6" fill="#fff" stroke="#c0392b"/><text x="235" y="274" text-anchor="middle">scaler.unscale_(grads)</text>
+    <rect x="345" y="252" width="170" height="34" rx="6" fill="#fff" stroke="#b7791f"/><text x="430" y="274" text-anchor="middle">clip_grad_norm_ (5.0)</text>
+    <rect x="535" y="252" width="160" height="34" rx="6" fill="#fff" stroke="#1e7a55"/><text x="615" y="274" text-anchor="middle">optimizer.step()</text>
+    <rect x="715" y="252" width="90" height="34" rx="6" fill="#fff" stroke="#666"/><text x="760" y="274" text-anchor="middle">zero_grad()</text>
+  </g>
+  <text x="470" y="316" text-anchor="middle" font-size="11.5" fill="#666">Adam 用 .grad 更新 m/v 与参数（读写在常驻的 ~360MB 参数区：参数+梯度+Adam）→ 清空 .grad → 进入下一轮</text>
+</svg>
