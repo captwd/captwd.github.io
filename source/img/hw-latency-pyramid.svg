@@ -1,0 +1,36 @@
+<svg viewBox="0 0 940 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1e7a55"/>
+    </marker>
+  </defs>
+  <g font-size="12.5">
+    <!-- pyramid layers -->
+    <polygon points="400,20 540,20 480,70 460,70" fill="#14573c"/>
+    <text x="470" y="50" text-anchor="middle" fill="#fff" font-size="11.5">寄存器 ~0.3ns</text>
+    <polygon points="380,78 560,78 590,128 350,128" fill="#1e7a55"/>
+    <text x="470" y="108" text-anchor="middle" fill="#fff" font-size="11.5">L1/L2 缓存 1~10ns（KB~MB）</text>
+    <polygon points="345,136 595,136 630,186 310,186" fill="#2c8f66"/>
+    <text x="470" y="166" text-anchor="middle" fill="#fff" font-size="11.5">L3 共享缓存 10~40ns（几十 MB）</text>
+    <polygon points="305,194 635,194 670,244 270,244" fill="#b7791f"/>
+    <text x="470" y="222" text-anchor="middle" fill="#fff" font-size="11.5">内存 DRAM ~100ns（GB 级）</text>
+    <polygon points="265,252 675,252 710,302 230,302" fill="#2563ab"/>
+    <text x="470" y="280" text-anchor="middle" fill="#fff" font-size="11.5">NVMe SSD ~0.1ms（TB 级）</text>
+    <polygon points="225,310 715,310 750,360 190,360" fill="#64748b"/>
+    <text x="470" y="338" text-anchor="middle" fill="#fff" font-size="11.5">机械硬盘 ~10ms（TB 级）｜网络跨洋 ~0.15s</text>
+  </g>
+  <!-- human scale -->
+  <g font-size="12" fill="#14573c" font-weight="bold">
+    <text x="770" y="105" text-anchor="middle">人类时间标尺</text>
+    <text x="770" y="128" text-anchor="middle">（1 周期 ≈ 1 秒）</text>
+  </g>
+  <g font-size="11.5" fill="#666">
+    <text x="770" y="166" text-anchor="middle">L1 命中 ≈ 4 秒</text>
+    <text x="770" y="192" text-anchor="middle">L3 命中 ≈ 40 秒</text>
+    <text x="770" y="222" text-anchor="middle">内存 ≈ 5 分钟</text>
+    <text x="770" y="252" text-anchor="middle">SSD ≈ 3.5 天</text>
+    <text x="770" y="282" text-anchor="middle">机械盘寻道 ≈ 9 个月</text>
+    <text x="770" y="308" text-anchor="middle">跨洋网络 ≈ 14 年</text>
+  </g>
+  <text x="470" y="388" text-anchor="middle" font-size="12" fill="#666">换算基准：3GHz CPU，1 周期 ≈ 0.33ns，放大 30 亿倍后用"人的一生"去感受每层差距</text>
+</svg>

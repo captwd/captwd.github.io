@@ -1,0 +1,17 @@
+<svg viewBox="0 0 940 250" xmlns="http://www.w3.org/2000/svg">
+  <rect x="40" y="40" width="880" height="70" rx="8" fill="#f7faf8" stroke="#999"/>
+  <text x="55" y="30" font-size="13" fill="#14573c" font-weight="bold">专用显存 7.6GB 的构成（训练中，示意比例）</text>
+  <g font-size="11.5" fill="#fff">
+    <rect x="40"  y="52" width="120" height="46" fill="#2563ab"/><text x="100" y="72" text-anchor="middle">CUDA 上下文</text><text x="100" y="88" text-anchor="middle">~0.4GB</text>
+    <rect x="160" y="52" width="150" height="46" fill="#1e7a55"/><text x="235" y="72" text-anchor="middle">参数 fp32 主本</text><text x="235" y="88" text-anchor="middle">~90MB（22.5M 全量）</text>
+    <rect x="310" y="52" width="150" height="46" fill="#2c8f66"/><text x="385" y="72" text-anchor="middle">梯度 .grad</text><text x="385" y="88" text-anchor="middle">~90MB（同形）</text>
+    <rect x="460" y="52" width="150" height="46" fill="#14573c"/><text x="535" y="72" text-anchor="middle">Adam m+v</text><text x="535" y="88" text-anchor="middle">~180MB（精确 2×）</text>
+    <rect x="610" y="52" width="180" height="46" fill="#b7791f"/><text x="700" y="72" text-anchor="middle">激活（当前微批）</text><text x="700" y="88" text-anchor="middle">随 batch/序列长 变化</text>
+    <rect x="790" y="52" width="130" height="46" fill="#64748b"/><text x="855" y="72" text-anchor="middle">分配器缓存</text><text x="855" y="88" text-anchor="middle">已释放待复用</text>
+  </g>
+  <!-- spill -->
+  <rect x="40" y="150" width="880" height="56" rx="8" fill="#fce8e6" stroke="#c0392b" stroke-dasharray="6 4"/>
+  <text x="70" y="182" font-size="13" fill="#c0392b" font-weight="bold">越界区 = 共享 GPU 内存（系统 RAM）</text>
+  <text x="480" y="182" font-size="12.5" fill="#c0392b">WDDM 自动分页，走 PCIe（16~32GB/s vs 显存 300+GB/s）→ 利用率锯齿、it/s 掉数倍</text>
+  <text x="480" y="198" font-size="11.5" fill="#c0392b">之前的 batch64 溢出 ~1GB 就落在这里；现 batch32 已回到上栏</text>
+</svg>

@@ -1,0 +1,43 @@
+<svg viewBox="0 0 940 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1e7a55"/>
+    </marker>
+  </defs>
+  <!-- Tensor object -->
+  <rect x="20" y="40" width="250" height="200" rx="10" fill="#e8f4ee" stroke="#1e7a55" stroke-width="2"/>
+  <text x="145" y="66" text-anchor="middle" font-size="15" font-weight="bold" fill="#14573c">Python 张量对象</text>
+  <text x="40" y="94" font-size="13">x : Tensor（元数据，~几百 B）</text>
+  <text x="52" y="120" font-size="12.5">shape = [256, 172]</text>
+  <text x="52" y="142" font-size="12.5">stride / dtype = float32</text>
+  <text x="52" y="164" font-size="12.5">device = cuda:0</text>
+  <text x="52" y="186" font-size="12.5">requires_grad = True（Parameter）</text>
+  <text x="52" y="214" font-size="12.5" fill="#2563ab" font-weight="bold">storage → 指针 ↓</text>
+
+  <!-- arrow -->
+  <line x1="272" y1="140" x2="330" y2="140" stroke="#1e7a55" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="300" y="128" text-anchor="middle" font-size="12" fill="#666">引用</text>
+
+  <!-- Storage -->
+  <rect x="335" y="70" width="260" height="140" rx="10" fill="#fff" stroke="#2563ab" stroke-width="2"/>
+  <text x="465" y="96" text-anchor="middle" font-size="15" font-weight="bold" fill="#2563ab">Storage（引用计数缓冲）</text>
+  <text x="465" y="118" text-anchor="middle" font-size="12.5" fill="#666">一整块连续内存，按字节计</text>
+  <g font-size="11" fill="#fff">
+    <rect x="355" y="130" width="44" height="26" fill="#2563ab"/><text x="377" y="147" text-anchor="middle">f32</text>
+    <rect x="399" y="130" width="44" height="26" fill="#3b82c4"/><text x="421" y="147" text-anchor="middle">f32</text>
+    <rect x="443" y="130" width="44" height="26" fill="#2563ab"/><text x="465" y="147" text-anchor="middle">f32</text>
+    <rect x="487" y="130" width="44" height="26" fill="#3b82c4"/><text x="509" y="147" text-anchor="middle">f32</text>
+    <rect x="531" y="130" width="44" height="26" fill="#2563ab"/><text x="553" y="147" text-anchor="middle">…</text>
+  </g>
+  <text x="465" y="192" text-anchor="middle" font-size="12" fill="#666">256 × 172 × 4B ≈ 176 KB</text>
+
+  <!-- views -->
+  <line x1="597" y1="110" x2="660" y2="110" stroke="#1e7a55" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="597" y1="170" x2="660" y2="170" stroke="#1e7a55" stroke-width="2" marker-end="url(#ar)"/>
+  <rect x="665" y="80" width="250" height="52" rx="8" fill="#f7faf8" stroke="#1e7a55"/>
+  <text x="790" y="102" text-anchor="middle" font-size="12.5">x[ :, 10]（切片视图）</text>
+  <text x="790" y="120" text-anchor="middle" font-size="11.5" fill="#666">新建元数据，共享 Storage → 零拷贝</text>
+  <rect x="665" y="150" width="250" height="52" rx="8" fill="#f7faf8" stroke="#1e7a55"/>
+  <text x="790" y="172" text-anchor="middle" font-size="12.5">x.view(...)（形状视图）</text>
+  <text x="790" y="190" text-anchor="middle" font-size="11.5" fill="#666">同上；.to(device) 则相反：新建 Storage</text>
+</svg>
