@@ -8,3 +8,6 @@ desktop.ini
 .obsidian/
 .trash/
 .claude/
+
+# Hexo 缓存数据库（每次 generate 都会变，无需入库）
+db.json
