@@ -19,6 +19,8 @@ nav:
 
 menu:
   首页: / || fas fa-home
+  试听: /listen/ || fas fa-headphones
+  Demo: /demo/ || fas fa-flask
   文章: /archives/ || fas fa-archive
   动态: /moments/ || fas fa-heart
   相册: /photos/ || fas fa-images
