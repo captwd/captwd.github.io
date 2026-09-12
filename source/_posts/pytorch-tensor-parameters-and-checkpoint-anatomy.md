@@ -1,6 +1,6 @@
 ---
 title: PyTorch 参数解剖：从 Tensor 内存布局到 258MB checkpoint 的精确账本
-date: 2026-09-06
+date: 2026-09-06 12:00:00
 tags: [PyTorch, 显存, 训练调优, 科普]
 categories: [深度学习实践]
 description: 从 Tensor 的内存布局到 258MB checkpoint 的精确账本，解释显存构成与权重迁移限制。

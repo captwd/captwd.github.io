@@ -1,6 +1,6 @@
 ---
 title: 工程改造三件套：声码器注册表、评价指标体系与静态 Demo 页
-date: 2026-09-06
+date: 2026-09-06 12:00:00
 tags: [Matcha-TTS, TTS, 重构, 评估]
 categories: [深度学习实践]
 description: 声码器注册表、MCD/WER/CER 评价体系与静态试听 Demo 页的工程化改造记录。

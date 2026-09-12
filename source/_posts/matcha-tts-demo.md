@@ -1,6 +1,6 @@
 ---
 title: 试听 Demo：Matcha-TTS 复现与改进
-date: 2026-09-12
+date: 2026-09-12 12:00:00
 tags: [Matcha-TTS, TTS, Demo]
 categories: [深度学习实践]
 description: 几组模型的试听对比（LJSpeech val 5 句）与客观指标汇总，含双向 Mamba2 一组。
