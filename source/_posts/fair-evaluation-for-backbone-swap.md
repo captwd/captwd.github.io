@@ -2,7 +2,7 @@
 title: 换骨干实验怎么做才公平：MCD 标定、协议统一与配对检验
 date: 2026-09-11 12:00:00
 tags: [实验方法, TTS, 统计检验, MCD]
-categories: [深度学习实践]
+categories: [Matcha-TTS]
 description: 换骨干实验的方法论：MCD 标定、评估协议统一、配对显著性检验与混淆变量的剥离。
 ---
 

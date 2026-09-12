@@ -2,7 +2,7 @@
 title: DDPM × MNIST：统一协议下的分类模型对比实验
 date: 2026-09-12
 tags: [DDPM, MNIST, 对比实验, Demo]
-categories: [深度学习实践]
+categories: [DDPM]
 description: 统一数据/训练/评估协议，横向对比 ANN、CNN、ViT 与传统机器学习模型，并用 DDPM 生成数据做下游可用性评估。
 ---
 

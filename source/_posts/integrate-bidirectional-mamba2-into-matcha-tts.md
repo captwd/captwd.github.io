@@ -2,7 +2,7 @@
 title: 把双向 Mamba2 换进 Matcha-TTS 的 U-Net：设计、陷阱与验证
 date: 2026-09-11 12:00:00
 tags: [Mamba, TTS, 模型改造, PyTorch]
-categories: [深度学习实践]
+categories: [Matcha-TTS]
 description: 把双向 Mamba2 换进 Matcha-TTS 的 U-Net：设计决策、全局初始化陷阱与完整的验证清单。
 ---
 

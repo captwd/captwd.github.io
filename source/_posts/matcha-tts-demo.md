@@ -2,7 +2,7 @@
 title: 试听 Demo：Matcha-TTS 复现与改进
 date: 2026-09-12 12:00:00
 tags: [Matcha-TTS, TTS, Demo]
-categories: [深度学习实践]
+categories: [Matcha-TTS]
 description: 架构、试听矩阵、客观指标与 MCD 震荡专题——本项目的一个汇总页。
 ---
 

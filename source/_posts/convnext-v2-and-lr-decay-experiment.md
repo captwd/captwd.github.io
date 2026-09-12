@@ -2,7 +2,7 @@
 title: 换掉 U-Net 的卷积块：ConvNeXt V2 实验与一次 MCD 震荡的机制归因
 date: 2026-09-07 12:00:00
 tags: [ConvNeXt, TTS, 实验方法, 超参]
-categories: [深度学习实践]
+categories: [Matcha-TTS]
 description: 把 U-Net 的卷积块换成 ConvNeXt V2，并用学习率衰减干预实验归因 MCD 震荡的机制。
 ---
 

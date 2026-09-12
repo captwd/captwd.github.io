@@ -2,7 +2,7 @@
 title: Windows 从零训练 Matcha-TTS 的踩坑全集
 date: 2026-09-05 12:00:00
 tags: [Matcha-TTS, TTS, 环境配置, Windows]
-categories: [深度学习实践]
+categories: [Matcha-TTS]
 description: 在 Windows 上从零训练 Matcha-TTS：安装、数据管线、训练稳定性与显存调优的全部踩坑记录。
 ---
 

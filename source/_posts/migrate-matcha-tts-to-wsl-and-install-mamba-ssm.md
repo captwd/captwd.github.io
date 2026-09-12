@@ -2,7 +2,7 @@
 title: 从 Windows 到 WSL2：一次 TTS 训练迁移与 mamba-ssm 安装实录
 date: 2026-09-11 12:00:00
 tags: [WSL, CUDA, Mamba, TTS, 环境配置]
-categories: [深度学习实践]
+categories: [Matcha-TTS]
 description: WSL2 迁移与 mamba-ssm 安装实录：数据搬运、缓存复用与 CUDA 扩展安装的三个坑。
 ---
 
