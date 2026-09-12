@@ -5,7 +5,7 @@ date: 2026-09-11
 
 从一个 18M 参数的 Matcha-TTS 项目出发，记录从环境搭建、数据管线优化、结构替换实验，一直到迁移 WSL2 并换用 Mamba 骨干的完整过程。共 10 篇，建议按顺序阅读。
 
-> **在线试听**：博客内嵌版 <https://captwd.github.io/listen/> ｜ 独立版 <https://captwd.github.io/demo/>
+> **试听 Demo**：[站内试听](https://captwd.github.io/2026/09/12/matcha-tts-demo/) ｜ [独立版](https://captwd.github.io/demo/)
 > **项目代码**：<https://github.com/captwd/mamba-matcha-tts>
 
 | # | 日期 | 文章 |
