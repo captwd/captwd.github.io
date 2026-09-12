@@ -1066,6 +1066,7 @@ inject:
     - '<video autoplay loop muted playsinline style="position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:-999;opacity:0.8;pointer-events:none;"><source src="/video/live.mp4" type="video/mp4"></video>'
     - '<script src="/mascot/looklook.js"></script>'
     - '<script src="/mascot/arkpets/lazy-load.js"></script>'
+    - '<script src="/js/pagination-scroll.js"></script>'
 
 
 # CDN Settings
