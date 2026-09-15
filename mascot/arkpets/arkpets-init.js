@@ -398,6 +398,7 @@
   }
 
   function startPositionTracking() {
+    if (followAnimation) return;
     function updateDialogPosition() {
       var canvas = document.getElementById('arkpets-demo');
       if (canvas && isVisible) {
@@ -536,6 +537,18 @@
       API_BASE_URL = url;
     }
   };
+
+  // 切到后台/隐藏时停止跟随动画并暂停语音；回到前台且桌宠可见时恢复
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      stopPositionTracking();
+      if (currentAudio) {
+        currentAudio.pause();
+      }
+    } else if (isVisible) {
+      startPositionTracking();
+    }
+  });
 
   if (document.readyState !== 'loading') {
     initArkPets();

@@ -1,0 +1,340 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="dark"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>给蛋白距离预测注入统计势：想法与模型架构 | captwd的笔记</title><meta name="author" content="captwd"><meta name="copyright" content="captwd"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#0d0d0d"><meta name="description" content="记录把 PDB 统计势注入 ESM2 距离预测的思路与架构：37-bin Cβ 统计势的构建、四种注入机制，以及&quot;架构 &#x2F; 机制 &#x2F; 内容&quot;三路分解的受控设计。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="给蛋白距离预测注入统计势：想法与模型架构">
+<meta property="og:url" content="https://captwd.github.io/2026/09/13/injecting-statistical-potentials-ideas-and-architecture/index.html">
+<meta property="og:site_name" content="captwd的笔记">
+<meta property="og:description" content="记录把 PDB 统计势注入 ESM2 距离预测的思路与架构：37-bin Cβ 统计势的构建、四种注入机制，以及&quot;架构 &#x2F; 机制 &#x2F; 内容&quot;三路分解的受控设计。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://captwd.github.io/img/me.png">
+<meta property="article:published_time" content="2026-09-13T12:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-13T12:48:08.671Z">
+<meta property="article:author" content="captwd">
+<meta property="article:tag" content="ESM2">
+<meta property="article:tag" content="PMF">
+<meta property="article:tag" content="模型架构">
+<meta property="article:tag" content="统计势">
+<meta property="article:tag" content="蛋白质">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://captwd.github.io/img/me.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "给蛋白距离预测注入统计势：想法与模型架构",
+  "url": "https://captwd.github.io/2026/09/13/injecting-statistical-potentials-ideas-and-architecture/",
+  "image": "https://captwd.github.io/img/me.png",
+  "datePublished": "2026-09-13T12:00:00.000Z",
+  "dateModified": "2026-09-13T12:48:08.671Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "captwd",
+      "url": "https://captwd.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/me.png"><link rel="canonical" href="https://captwd.github.io/2026/09/13/injecting-statistical-potentials-ideas-and-architecture/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.5"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '给蛋白距离预测注入统计势：想法与模型架构',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><style>#web_bg { background: transparent !important; }</style><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/mascot/looklook.css"><meta name="generator" content="Hexo 8.1.2"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/me.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">18</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">40</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">5</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 文章</span></a></div><div class="menus_item"><a class="site-page" href="/moments/"><i class="fa-fw fas fa-heart"></i><span> 动态</span></a></div><div class="menus_item"><a class="site-page" href="/photos/"><i class="fa-fw fas fa-images"></i><span> 相册</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comments"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/links/"><i class="fa-fw fas fa-link"></i><span> 链接</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/index-bg.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">captwd的笔记</span></a><a class="nav-page-title" href="/"><span class="site-name">给蛋白距离预测注入统计势：想法与模型架构</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 文章</span></a></div><div class="menus_item"><a class="site-page" href="/moments/"><i class="fa-fw fas fa-heart"></i><span> 动态</span></a></div><div class="menus_item"><a class="site-page" href="/photos/"><i class="fa-fw fas fa-images"></i><span> 相册</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comments"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/links/"><i class="fa-fw fas fa-link"></i><span> 链接</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">给蛋白距离预测注入统计势：想法与模型架构</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-09-13T12:00:00.000Z" title="发表于 2026-09-13 20:00:00">2026-09-13</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-09-13T12:48:08.671Z" title="更新于 2026-09-13 20:48:08">2026-09-13</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/Protein/">Protein</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><p>深度学习做蛋白质结构预测已经很强了，于是就有个老问题：<strong>还需要显式地注入物理先验吗？</strong> 比如从 PDB 里统计出来的统计势（statistical potential of mean force, PMF）。这篇不谈结果，只记一下我在这件事上的<strong>想法</strong>和<strong>模型架构</strong>。</p>
+<h2 id="一、想法：把”注入有用”拆成三笔账"><a href="#一、想法：把”注入有用”拆成三笔账" class="headerlink" title="一、想法：把”注入有用”拆成三笔账"></a>一、想法：把”注入有用”拆成三笔账</h2><p>直接从 baseline 跳到”注入真实 PMF”，其实同时改动了三样东西：</p>
+<ul>
+<li><strong>架构</strong>：多了一个注意力模块，容量变大了；</li>
+<li><strong>机制</strong>：多了一条偏置信号进入注意力——不管它的数值是什么，都存在一个结构归纳偏置；</li>
+<li><strong>内容</strong>：这条偏置携带了物理知识（氨基酸对 × 距离的能量偏好）。</li>
+</ul>
+<p>这三者在任何”加 vs 不加”的对比里都是<strong>混在一起</strong>的，所以单看总分根本不知道收益来自哪里。我的想法是设计四个<strong>每次只变一个</strong>的条件，把账拆开：</p>
+<table>
+<thead>
+<tr>
+<th>条件</th>
+<th>变化</th>
+<th>逐差得到</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Baseline</td>
+<td>无轴向注意力、无注入</td>
+<td>测量原点</td>
+</tr>
+<tr>
+<td>Axial, zero bias</td>
+<td>加轴向注意力，偏置固定为 0</td>
+<td><strong>架构</strong>（模块容量）</td>
+</tr>
+<tr>
+<td>Shuffled PMF</td>
+<td>PMF 的氨基酸标签随机置换</td>
+<td><strong>机制</strong>（有偏置路径、无内容）</td>
+</tr>
+<tr>
+<td>True PMF</td>
+<td>完整统计势</td>
+<td><strong>内容</strong>（氨基酸特异的物理）</td>
+</tr>
+</tbody></table>
+<p>于是有一条加性路径分解：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Δtotal = Δarch + Δmech + Δcontent</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li><code>Δarch = P@L(axial,0) − P@L(baseline)</code></li>
+<li><code>Δmech = P@L(shuffled) − P@L(axial,0)</code></li>
+<li><code>Δcontent = P@L(real) − P@L(shuffled)</code></li>
+</ul>
+<p>要强调：这是<strong>操作性、路径依赖</strong>的分解，不是唯一的因果划分。<strong>打乱对照是整个设计的命门</strong>——它只破坏”氨基酸 ↔ 能量”的对应，保留沿距离方向的分布形状，所以如果 <code>Δcontent ≈ 0</code>，就说明模型消费的是注入路径而不是物理内容。</p>
+<h2 id="二、模型架构"><a href="#二、模型架构" class="headerlink" title="二、模型架构"></a>二、模型架构</h2><p>整体是一条”序列 → 冻结的 ESM2 → 成对表示 → 距离分布”的流水线，外加一条从 PDB 统计出来的 PMF 分支。</p>
+<h3 id="1-输入与骨干"><a href="#1-输入与骨干" class="headerlink" title="1. 输入与骨干"></a>1. 输入与骨干</h3><p>输入是氨基酸序列。骨干是一个<strong>冻结</strong>的 ESM2 语言模型（强版 650M、1280 维；轻版 35M、480 维），逐残基 embedding <strong>预先抽取并缓存</strong>。冻结的好处是省显存、训练稳定，也把”骨干本身会不会变”这个变量固定住。</p>
+<h3 id="2-1D-n-gram-编码器"><a href="#2-1D-n-gram-编码器" class="headerlink" title="2. 1D n-gram 编码器"></a>2. 1D n-gram 编码器</h3><p>用 3&#x2F;5&#x2F;7 三种窗口的一维卷积，捕捉不同尺度的局部序列模式。</p>
+<h3 id="3-1D-→-2D：外和展开"><a href="#3-1D-→-2D：外和展开" class="headerlink" title="3. 1D → 2D：外和展开"></a>3. 1D → 2D：外和展开</h3><p>把每个残基的 1D 表示做 <strong>outer sum</strong> 得到成对表示，再加上<strong>相对位置编码</strong>。这一步把”每个残基”的信息变成”每对残基”的信息。</p>
+<h3 id="4-三角乘法块"><a href="#4-三角乘法块" class="headerlink" title="4. 三角乘法块"></a>4. 三角乘法块</h3><p>接 <strong>4 层 AlphaFold 风格的 triangle multiplication + 前馈网络</strong>。三角块的直觉是：如果 (i,j)、(j,k) 的关系已知，就能推断 (i,k)，从而让成对表示在几何上自洽。</p>
+<h3 id="5-轴向自注意力"><a href="#5-轴向自注意力" class="headerlink" title="5. 轴向自注意力"></a>5. 轴向自注意力</h3><p>在成对表示上做行&#x2F;列方向的<strong>轴向自注意力</strong>。这个模块只在”注入条件”下启用——它也是”架构贡献”的来源，所以必须能被单独开关。</p>
+<h3 id="6-距离头（37-bin）"><a href="#6-距离头（37-bin）" class="headerlink" title="6. 距离头（37-bin）"></a>6. 距离头（37-bin）</h3><p>最后映射到 <strong>37 个 bin 的距离 logits</strong>，期望距离 &#x3D; <code>Σ softmax(logits)_b · bin_center_b</code>。用分布而不是单点回归，是因为接触预测关心的是整个距离分布。</p>
+<h3 id="7-PMF-分支"><a href="#7-PMF-分支" class="headerlink" title="7. PMF 分支"></a>7. PMF 分支</h3><p>另一条支线从非冗余 PDB 结构出发：Cβ 提取 → 37-bin 统计 → 逆玻尔兹曼 → 得到能量谱 <code>E(37, 20, 20)</code>。<strong>它的 bin 边界必须和距离头的 bin 严格对齐</strong>，否则先验和模型输出会错位。</p>
+<h2 id="三、统计势（PMF）怎么建"><a href="#三、统计势（PMF）怎么建" class="headerlink" title="三、统计势（PMF）怎么建"></a>三、统计势（PMF）怎么建</h2><ul>
+<li><p><strong>来源</strong>：PISCES 非冗余 cull（序列同一性 ≤15%、分辨率 ≤2.5 Å、R-factor ≤0.3、仅 X-ray、链长 ≥40）。</p>
+</li>
+<li><p><strong>原子口径</strong>：Cβ–Cβ（Gly 没有 Cβ，退化为 Cα）。这样和 trRosetta 的 <code>dist</code> 字段、CASP 接触定义、AlphaFold2 的 distogram 口径一致。</p>
+</li>
+<li><p><strong>分箱</strong>：36 个 0.5 Å 的 bin 覆盖 <code>[2, 20)</code> Å，外加一个 far bin（≥20 Å）。</p>
+</li>
+<li><p><strong>逆玻尔兹曼</strong>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">E[aai, aaj, b] = − log [ P(r_b | aai, aaj) / P(r_b) ]</span><br></pre></td></tr></table></figure>
+
+<p>对称化后截断到 ±4；能量越低越有利，注入时用 <code>−E</code>。</p>
+</li>
+<li><p><strong>细节</strong>：只统计序列间隔 ≥2 的残基对（排除 i,i+1 这类由键长决定的近邻对）；伪计数 λ&#x3D;1.0。</p>
+</li>
+</ul>
+<h2 id="四、四种注入机制"><a href="#四、四种注入机制" class="headerlink" title="四、四种注入机制"></a>四、四种注入机制</h2><p>所有注入变体共享一个统一形式 <code>E = exp(log_scale) · E_pmf + ΔE</code>，其中 <code>E_pmf</code> 是冻结的统计势，<code>ΔE</code> 是可学习残差。</p>
+<table>
+<thead>
+<tr>
+<th>机制</th>
+<th>层级</th>
+<th>做法</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>软查表 Soft lookup</td>
+<td>注意力</td>
+<td>用预测距离分布对 PMF 取期望能量 <code>E_ij = Σ_b p_ij(b) · E_pmf(ai,aj,b)</code>，<code>−E</code> 作为注意力偏置</td>
+</tr>
+<tr>
+<td>静态偏置 Static bias</td>
+<td>注意力</td>
+<td>一张与距离无关的氨基酸对倾向表，零额外计算</td>
+</tr>
+<tr>
+<td>特征门控 Feature gating</td>
+<td>特征</td>
+<td>把期望能量通过一个可学习 gate <code>α</code> 融合进成对表示</td>
+</tr>
+<tr>
+<td>物理能量损失</td>
+<td>损失</td>
+<td><code>L_phys = relu(E_soft − E_true − margin)</code>，惩罚”预测分布比真实结构能量更高”</td>
+</tr>
+</tbody></table>
+<p>每种真实 PMF 机制都配一个<strong>同路径的打乱 PMF 对照</strong>，这样机制和内容才可比。</p>
+<h2 id="五、表示层面的旁证（想法）"><a href="#五、表示层面的旁证（想法）" class="headerlink" title="五、表示层面的旁证（想法）"></a>五、表示层面的旁证（想法）</h2><p>除了预测指标，我还想从<strong>表征</strong>上看模型到底怎么用这条偏置。做法是算模型成对表示（距离头输入）与 PMF 能量谱的<strong>线性 CKA</strong>，以及各条件之间的表征相似度。直觉上：</p>
+<ul>
+<li>如果模型真的把 PMF 当知识用了，表征应该和 PMF 能量谱有可观的对齐；</li>
+<li>如果只是把偏置当”路径”消费，那么<strong>内容交换（真实 ↔ 打乱）</strong> 引起的表征变化，应该小于 <strong>机制开关</strong> 引起的表征变化。</li>
+</ul>
+<p>这是一个相关性的旁证，不能单独当因果结论，但和预测层面的匹配对照互补。</p>
+<h2 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h2><ol>
+<li>想验证”注入有没有用”，一定要有<strong>打乱对照</strong>和<strong>架构对照</strong>，否则分不清架构、机制和内容。</li>
+<li>统计势要建得和模型<strong>逐 bin 对齐</strong>，先验才不会和输出错位。</li>
+<li>注入可以发生在不同层级（注意力 &#x2F; 特征 &#x2F; 损失），但每种都要配自己的匹配对照。</li>
+<li>表征分析（CKA）是预测指标之外的一条旁证：看模型对”内容”和”机制”的反应谁更大。</li>
+</ol>
+<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="三路分解"><a href="#三路分解" class="headerlink" title="三路分解"></a>三路分解</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">d_arch    = mean(axial_zero) - mean(baseline)</span><br><span class="line">d_mech    = mean(shuffled)   - mean(axial_zero)</span><br><span class="line">d_content = mean(real)       - mean(shuffled)</span><br><span class="line"><span class="keyword">assert</span> <span class="built_in">abs</span>((d_arch + d_mech + d_content) - (mean(real) - mean(baseline))) &lt; <span class="number">1e-9</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="软查表注入（注意力偏置）"><a href="#软查表注入（注意力偏置）" class="headerlink" title="软查表注入（注意力偏置）"></a>软查表注入（注意力偏置）</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># p_ij(b): 模型对 (i,j) 落在第 b 个距离 bin 的预测概率</span></span><br><span class="line">E_soft = (p_ij * E_pmf[aa_i, aa_j, :]).<span class="built_in">sum</span>(-<span class="number">1</span>)   <span class="comment"># 期望能量</span></span><br><span class="line">attn_logits = attn_logits + (-E_soft)            <span class="comment"># 低能量 -&gt; 高注意力</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="特征门控与物理损失"><a href="#特征门控与物理损失" class="headerlink" title="特征门控与物理损失"></a>特征门控与物理损失</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pair = pair + alpha * E_soft                       <span class="comment"># feature gating</span></span><br><span class="line">L_phys = torch.relu(E_soft - E_true - margin)      <span class="comment"># loss-level hard constraint</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="bin-对齐自检"><a href="#bin-对齐自检" class="headerlink" title="bin 对齐自检"></a>bin 对齐自检</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">assert</span> np.allclose(BIN_EDGES, MODEL_BIN_EDGES)</span><br><span class="line"><span class="keyword">assert</span> np.array_equal(AA_ORDER, <span class="string">&quot;ACDEFGHIKLMNPQRSTVWY&quot;</span>)</span><br></pre></td></tr></table></figure>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://captwd.github.io">captwd</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://captwd.github.io/2026/09/13/injecting-statistical-potentials-ideas-and-architecture/">https://captwd.github.io/2026/09/13/injecting-statistical-potentials-ideas-and-architecture/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://captwd.github.io" target="_blank">captwd的笔记</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/PMF/">PMF</a><a class="post-meta__tags" href="/tags/ESM2/">ESM2</a><a class="post-meta__tags" href="/tags/%E8%9B%8B%E7%99%BD%E8%B4%A8/">蛋白质</a><a class="post-meta__tags" href="/tags/%E7%BB%9F%E8%AE%A1%E5%8A%BF/">统计势</a><a class="post-meta__tags" href="/tags/%E6%A8%A1%E5%9E%8B%E6%9E%B6%E6%9E%84/">模型架构</a></div><div class="post-share"><div class="social-share" data-image="/img/me.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/09/13/f5-tts-zero-shot-duration-and-decoupled-heads/" title="F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">F5-TTS 零样本的时长之困：从参考音频的坑，到"解耦预测头"的想法</div></div><div class="info-2"><div class="info-item-1"> 相关：Sway Sampling 实测 ｜ 代码：F5-TTS ｜ 论文：arXiv 2410.06885  今天第一次把 F5-TTS 真正跑起来，本来只是想克隆一个音色，结果被”语速太快”这件事绊住，然后顺着它一路想到模型结构。这篇把整条链记下来，重点放在最后那个解耦预测头的想法。 一、F5-TTS 是什么（一句话版）F5-TTS 是条件流匹配（CFM）+ DiT 的非自回归 TTS：  训练：取真实 mel x1 和高斯噪声 x0，随机时刻 t 构造 x_t=(1−t)x0+t·x1，让网络预测直线速度 v=x1−x0，只对被 mask 的”待生成区”算 MSE。 推理：从噪声出发，用 ODE 沿学到的速度场积分到 t=1，得到 mel。 条件：把参考 mel 和文本一起拼进序列，参考区被”钉住”不动（in-context infilling）——这就是零样本声音克隆的来源。 它刻意做得很简：没有 duration model、没有 text encoder、没有 phoneme alignment，也没有说话人编码器。  这几条代码里都能对上：cfm.py 的 forw...</div></div></div></a><a class="pagination-related" href="/2026/09/13/sway-sampling-for-flow-matching-tts/" title="Sway Sampling 实测：少步数推理的收益与代价"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">Sway Sampling 实测：少步数推理的收益与代价</div></div><div class="info-2"><div class="info-item-1"> 相关：Matcha-TTS 训练手记系列 ｜ 项目代码：https://github.com/captwd/mamba-matcha-tts  前面几篇都在改模型（换 Mamba、换 ConvNeXt）。这篇换个方向：不动模型、不重新训练，只在推理时改一下 ODE 的时间步怎么分配，能拿到多少收益——以及一个只看指标发现不了的问题。 Sway Sampling 是什么来自 F5-TTS（arXiv 2410.06885）。推理时把均匀的时间轴做一次非线性重参数化： 1t ← t + a · ( cos(π/2 · t) − 1 + t )   端点不变（t&#x3D;0→0，t&#x3D;1→1），所以积分的起点终点不受影响，只改中间的步长分布 a &lt; 0 时步长在噪声端（t≈0）更密；F5 的默认值是 a = −1.0 本质是数值积分的步长分配：步数有限时，离散化误差沿轨迹并不均匀，把步子挪到误差大的地方更划算  接进 Matcha 只要三处   文件 改动    matcha/models/components/flow_matching.py t_span 生成后加...</div></div></div></a></nav><hr class="custom-hr"/><div id="post-comment"><div class="comment-head"><div class="comment-headline"><i class="fas fa-comments fa-fw"></i><span> 评论</span></div></div><div class="comment-wrap"><div><div id="waline-wrap"></div></div></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/me.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">captwd</div><div class="author-info-description"></div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">18</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">40</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">5</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/captwd"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/captwd" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a><a class="social-icon" href="mailto:3498376281@qq.com" target="_blank" title="Email"><i class="fas fa-envelope" style="color: #4a7dbe;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">欢迎！</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E3%80%81%E6%83%B3%E6%B3%95%EF%BC%9A%E6%8A%8A%E2%80%9D%E6%B3%A8%E5%85%A5%E6%9C%89%E7%94%A8%E2%80%9D%E6%8B%86%E6%88%90%E4%B8%89%E7%AC%94%E8%B4%A6"><span class="toc-number">1.</span> <span class="toc-text">一、想法：把”注入有用”拆成三笔账</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%8C%E3%80%81%E6%A8%A1%E5%9E%8B%E6%9E%B6%E6%9E%84"><span class="toc-number">2.</span> <span class="toc-text">二、模型架构</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-%E8%BE%93%E5%85%A5%E4%B8%8E%E9%AA%A8%E5%B9%B2"><span class="toc-number">2.1.</span> <span class="toc-text">1. 输入与骨干</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-1D-n-gram-%E7%BC%96%E7%A0%81%E5%99%A8"><span class="toc-number">2.2.</span> <span class="toc-text">2. 1D n-gram 编码器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-1D-%E2%86%92-2D%EF%BC%9A%E5%A4%96%E5%92%8C%E5%B1%95%E5%BC%80"><span class="toc-number">2.3.</span> <span class="toc-text">3. 1D → 2D：外和展开</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-%E4%B8%89%E8%A7%92%E4%B9%98%E6%B3%95%E5%9D%97"><span class="toc-number">2.4.</span> <span class="toc-text">4. 三角乘法块</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#5-%E8%BD%B4%E5%90%91%E8%87%AA%E6%B3%A8%E6%84%8F%E5%8A%9B"><span class="toc-number">2.5.</span> <span class="toc-text">5. 轴向自注意力</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#6-%E8%B7%9D%E7%A6%BB%E5%A4%B4%EF%BC%8837-bin%EF%BC%89"><span class="toc-number">2.6.</span> <span class="toc-text">6. 距离头（37-bin）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#7-PMF-%E5%88%86%E6%94%AF"><span class="toc-number">2.7.</span> <span class="toc-text">7. PMF 分支</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%89%E3%80%81%E7%BB%9F%E8%AE%A1%E5%8A%BF%EF%BC%88PMF%EF%BC%89%E6%80%8E%E4%B9%88%E5%BB%BA"><span class="toc-number">3.</span> <span class="toc-text">三、统计势（PMF）怎么建</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%9B%9B%E3%80%81%E5%9B%9B%E7%A7%8D%E6%B3%A8%E5%85%A5%E6%9C%BA%E5%88%B6"><span class="toc-number">4.</span> <span class="toc-text">四、四种注入机制</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%94%E3%80%81%E8%A1%A8%E7%A4%BA%E5%B1%82%E9%9D%A2%E7%9A%84%E6%97%81%E8%AF%81%EF%BC%88%E6%83%B3%E6%B3%95%EF%BC%89"><span class="toc-number">5.</span> <span class="toc-text">五、表示层面的旁证（想法）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%B0%8F%E7%BB%93"><span class="toc-number">6.</span> <span class="toc-text">小结</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%85%B3%E9%94%AE%E4%BB%A3%E7%A0%81"><span class="toc-number">7.</span> <span class="toc-text">关键代码</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%89%E8%B7%AF%E5%88%86%E8%A7%A3"><span class="toc-number">7.1.</span> <span class="toc-text">三路分解</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E8%BD%AF%E6%9F%A5%E8%A1%A8%E6%B3%A8%E5%85%A5%EF%BC%88%E6%B3%A8%E6%84%8F%E5%8A%9B%E5%81%8F%E7%BD%AE%EF%BC%89"><span class="toc-number">7.2.</span> <span class="toc-text">软查表注入（注意力偏置）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%89%B9%E5%BE%81%E9%97%A8%E6%8E%A7%E4%B8%8E%E7%89%A9%E7%90%86%E6%8D%9F%E5%A4%B1"><span class="toc-number">7.3.</span> <span class="toc-text">特征门控与物理损失</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#bin-%E5%AF%B9%E9%BD%90%E8%87%AA%E6%A3%80"><span class="toc-number">7.4.</span> <span class="toc-text">bin 对齐自检</span></a></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/13/f5-tts-zero-shot-duration-and-decoupled-heads/" title="F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法">F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法</a><time datetime="2026-09-13T14:30:00.000Z" title="发表于 2026-09-13 22:30:00">2026-09-13</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/13/injecting-statistical-potentials-ideas-and-architecture/" title="给蛋白距离预测注入统计势：想法与模型架构">给蛋白距离预测注入统计势：想法与模型架构</a><time datetime="2026-09-13T12:00:00.000Z" title="发表于 2026-09-13 20:00:00">2026-09-13</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/13/sway-sampling-for-flow-matching-tts/" title="Sway Sampling 实测：少步数推理的收益与代价">Sway Sampling 实测：少步数推理的收益与代价</a><time datetime="2026-09-13T04:00:00.000Z" title="发表于 2026-09-13 12:00:00">2026-09-13</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/12/matcha-tts-demo/" title="试听 Demo：Matcha-TTS 复现与改进">试听 Demo：Matcha-TTS 复现与改进</a><time datetime="2026-09-12T04:00:00.000Z" title="发表于 2026-09-12 12:00:00">2026-09-12</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/12/mnist-ddpm-comparison-demo/" title="DDPM × MNIST：统一协议下的分类模型对比实验">DDPM × MNIST：统一协议下的分类模型对比实验</a><time datetime="2026-09-11T16:00:00.000Z" title="发表于 2026-09-12 00:00:00">2026-09-12</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By captwd</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.2</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.5</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><a id="to_comment" href="#post-comment" title="前往评论"><i class="fas fa-comments"></i></a><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.5"></script><script src="/js/main.js?v=5.5.5"></script><div class="js-pjax"><script>(() => {
+  let initFn = window.walineFn || null
+  const isShuoshuo = GLOBAL_CONFIG_SITE.pageType === 'shuoshuo'
+  const option = null
+
+  const destroyWaline = ele => ele.destroy()
+
+  const initWaline = (Fn, el = document, path = window.location.pathname) => {
+    const waline = Fn({
+      el: el.querySelector('#waline-wrap'),
+      serverURL: '',
+      pageview: false,
+      dark: 'html[data-theme="dark"]',
+      comment: false,
+      ...option,
+      path: isShuoshuo ? path : (option && option.path) || path
+    })
+
+    if (isShuoshuo) {
+      window.shuoshuoComment.destroyWaline = () => {
+        destroyWaline(waline)
+        if (el.children.length) {
+          el.innerHTML = ''
+          el.classList.add('no-comment')
+        }
+      }
+    }
+  }
+
+  const loadWaline = (el, path) => {
+    if (initFn) initWaline(initFn, el, path)
+    else {
+      btf.getCSS('https://cdn.jsdelivr.net/npm/@waline/client@3.15.2/dist/waline.min.css')
+        .then(() => import('https://cdn.jsdelivr.net/npm/@waline/client@3.15.2/dist/waline.min.js'))
+        .then(({ init }) => {
+          initFn = init || Waline.init
+          initWaline(initFn, el, path)
+          window.walineFn = initFn
+        })
+    }
+  }
+
+  if (isShuoshuo) {
+    'Waline' === 'Waline'
+      ? window.shuoshuoComment = { loadComment: loadWaline } 
+      : window.loadOtherComment = loadWaline
+    return
+  }
+
+  if ('Waline' === 'Waline' || !false) {
+    if (false) btf.loadComment(document.getElementById('waline-wrap'),loadWaline)
+    else setTimeout(loadWaline, 0)
+  } else {
+    window.loadOtherComment = loadWaline
+  }
+})()</script></div><video autoplay loop muted playsinline style="position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:-999;opacity:0.8;pointer-events:none;"><source src="/video/live.mp4" type="video/mp4"></video><script src="/mascot/looklook.js"></script><script src="/mascot/arkpets/lazy-load.js"></script><script src="/js/pagination-scroll.js"></script><script id="click-heart" src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/dist/click-heart.min.js" async="async" mobile="false"></script><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>

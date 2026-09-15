@@ -417,3 +417,31 @@ a:hover {
     transition: none !important;
   }
 }
+
+/* ========== 分类页 / 标签页毛玻璃面板（与文章卡片统一） ========== */
+div#category,
+div#tag {
+  background: rgba(18, 22, 34, 0.42) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
+  border: 1px solid rgba(180, 220, 255, 0.1) !important;
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.22),
+    0 0 18px rgba(120, 180, 255, 0.06) !important;
+  border-radius: 20px !important;
+  padding: 22px 26px 14px;
+}
+
+/* 时间线标题与条目提亮，避免压在动态背景上看不清 */
+div#category .article-sort-title,
+div#tag .article-sort-title {
+  color: rgba(235, 245, 255, 0.95) !important;
+  text-shadow: 0 0 10px rgba(120, 190, 255, 0.18);
+}
+
+div#category .article-sort-item-info,
+div#tag .article-sort-item-info,
+div#category .article-sort-item-time,
+div#tag .article-sort-item-time {
+  color: rgba(230, 238, 250, 0.9) !important;
+}
