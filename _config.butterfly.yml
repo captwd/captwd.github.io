@@ -1141,3 +1141,6 @@ CDN:
     # valine:
     # waline_css:
     # waline_js:
+
+# RSS 订阅按钮指向的地址
+rss: /atom.xml

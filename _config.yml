@@ -105,3 +105,19 @@ deploy:
   type: git
   repo: https://github.com/captwd/captwd.github.io.git
   branch: gh-pages
+
+# Sitemap（站点地图，供搜索引擎收录）
+sitemap:
+  path: sitemap.xml
+  rel: false
+
+# RSS/Atom 订阅
+feed:
+  enable: true
+  type: atom
+  path: atom.xml
+  limit: 20
+  content: true
+  content_limit: 140
+  content_limit_delim: ' '
+  order_by: -date
