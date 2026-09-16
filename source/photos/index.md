@@ -14,7 +14,7 @@ type: photos
     <div class="photo-caption">泡泡副本</div>
   </div>
   <div class="photo-item">
-    <img src="/img/index-bg.jpg" alt="首页背景">
+    <img src="/img/index-bg.webp" alt="首页背景">
     <div class="photo-caption">首页背景</div>
   </div>
   <div class="photo-item">

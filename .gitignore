@@ -11,3 +11,7 @@ desktop.ini
 
 # Hexo 缓存数据库（每次 generate 都会变，无需入库）
 db.json
+
+# 本地备份（原件与已删代码的存档，不入库）
+originals-backup/
+api-backup-*.tar.gz

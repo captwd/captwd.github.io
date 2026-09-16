@@ -2,7 +2,7 @@
 title: 留言板
 date: 2026-07-08 00:00:00
 type: message
-top_img: /img/index-bg.jpg
+top_img: /img/index-bg.webp
 comments: true
 ---
 

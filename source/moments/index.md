@@ -2,7 +2,7 @@
 title: 动态
 date: 2026-07-08 00:00:00
 type: moments
-top_img: /img/index-bg.jpg
+top_img: /img/index-bg.webp
 ---
 
 ## 我的动态
