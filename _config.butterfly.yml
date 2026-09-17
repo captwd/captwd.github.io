@@ -115,9 +115,9 @@ error_img:
 
 # A simple 404 page
 error_404:
-  enable: false
-  subtitle: 'Page Not Found'
-  background: /img/error-page.png
+  enable: true
+  subtitle: Page Not Found
+  background: /img/404.jpg
 
 post_meta:
   # Home Page
@@ -322,13 +322,13 @@ aside:
   card_tags:
     enable: true
     # If set 0 will show all
-    limit: 40
+    limit: 10
     color: false
     custom_colors:
     # Order of tags, random/name/length
-    orderby: random
+    orderby: length
     # Sort of order. 1, asc for ascending; -1, desc for descending
-    order: 1
+    order: -1
     sort_order:
   card_archives:
     enable: true
@@ -1012,9 +1012,9 @@ instantpage: false
 # Lazyload
 # https://github.com/verlok/vanilla-lazyload
 lazyload:
-  enable: false
+  enable: true
   # Use browser's native lazyload instead of vanilla-lazyload
-  native: false
+  native: true
   # Specify the field to use lazyload (site or post)
   field: site
   placeholder:
@@ -1144,3 +1144,5 @@ CDN:
 
 # RSS 订阅按钮指向的地址
 rss: /atom.xml
+
+

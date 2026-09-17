@@ -13,9 +13,9 @@
     {
       id: 'shu-nian',
       name: '春日宴',
-      skeleton: 'models/shu-nian/build_char_2025_shu_nian#11.skel',
-      atlas: 'models/shu-nian/build_char_2025_shu_nian#11.atlas',
-      texture: 'models/shu-nian/build_char_2025_shu_nian#11.png',
+      skeleton: 'models/shu-nian/build_char_2025_shu_nian_11.skel',
+      atlas: 'models/shu-nian/build_char_2025_shu_nian_11.atlas',
+      texture: 'models/shu-nian/build_char_2025_shu_nian_11.png',
       resourcePath: '/mascot/arkpets/'
     }
   ];
