@@ -1,0 +1,393 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="dark"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法 | captwd的笔记</title><meta name="author" content="captwd"><meta name="copyright" content="captwd"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#0d0d0d"><meta name="description" content="第一次真正跑 F5-TTS 零样本克隆，从&quot;语速对不上&quot;一路想到&quot;给流匹配模型加解耦预测头&quot;。记一下这条链，以及我最后那个想法：用时长&#x2F;音高&#x2F;能量几个头预测出韵律，再当成条件塞给下游生成器。顺带记下数据层面的抓手——语速扰动增广，和 tempo&#x2F;speed 那个坑。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法">
+<meta property="og:url" content="https://captwd.github.io/2026/09/13/f5-tts-zero-shot-duration-and-decoupled-heads/index.html">
+<meta property="og:site_name" content="captwd的笔记">
+<meta property="og:description" content="第一次真正跑 F5-TTS 零样本克隆，从&quot;语速对不上&quot;一路想到&quot;给流匹配模型加解耦预测头&quot;。记一下这条链，以及我最后那个想法：用时长&#x2F;音高&#x2F;能量几个头预测出韵律，再当成条件塞给下游生成器。顺带记下数据层面的抓手——语速扰动增广，和 tempo&#x2F;speed 那个坑。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://captwd.github.io/img/me.png">
+<meta property="article:published_time" content="2026-09-13T14:30:00.000Z">
+<meta property="article:modified_time" content="2026-09-17T15:54:54.794Z">
+<meta property="article:author" content="captwd">
+<meta property="article:tag" content="F5-TTS">
+<meta property="article:tag" content="数据增广">
+<meta property="article:tag" content="时长控制">
+<meta property="article:tag" content="流匹配">
+<meta property="article:tag" content="研究想法">
+<meta property="article:tag" content="解耦">
+<meta property="article:tag" content="零样本TTS">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://captwd.github.io/img/me.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "F5-TTS 零样本的时长之困：从参考音频的坑，到\"解耦预测头\"的想法",
+  "url": "https://captwd.github.io/2026/09/13/f5-tts-zero-shot-duration-and-decoupled-heads/",
+  "image": "https://captwd.github.io/img/me.png",
+  "datePublished": "2026-09-13T14:30:00.000Z",
+  "dateModified": "2026-09-17T15:54:54.794Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "captwd",
+      "url": "https://captwd.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/me.png"><link rel="canonical" href="https://captwd.github.io/2026/09/13/f5-tts-zero-shot-duration-and-decoupled-heads/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.5"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'F5-TTS 零样本的时长之困：从参考音频的坑，到"解耦预测头"的想法',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><style>#web_bg { background: transparent !important; }</style><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/mascot/looklook.css"><meta name="generator" content="Hexo 8.1.2"><link rel="alternate" href="/atom.xml" title="captwd的笔记" type="application/atom+xml">
+</head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/me.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/ loading='lazy'></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">20</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">47</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 文章</span></a></div><div class="menus_item"><a class="site-page" href="/moments/"><i class="fa-fw fas fa-heart"></i><span> 动态</span></a></div><div class="menus_item"><a class="site-page" href="/photos/"><i class="fa-fw fas fa-images"></i><span> 相册</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comments"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/links/"><i class="fa-fw fas fa-link"></i><span> 链接</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/index-bg.webp);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">captwd的笔记</span></a><a class="nav-page-title" href="/"><span class="site-name">F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 文章</span></a></div><div class="menus_item"><a class="site-page" href="/moments/"><i class="fa-fw fas fa-heart"></i><span> 动态</span></a></div><div class="menus_item"><a class="site-page" href="/photos/"><i class="fa-fw fas fa-images"></i><span> 相册</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comments"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/links/"><i class="fa-fw fas fa-link"></i><span> 链接</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-09-13T14:30:00.000Z" title="发表于 2026-09-13 22:30:00">2026-09-13</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-09-17T15:54:54.794Z" title="更新于 2026-09-17 23:54:54">2026-09-17</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/F5-TTS/">F5-TTS</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><blockquote>
+<p>相关：<a href="/2026/09/13/sway-sampling-for-flow-matching-tts/">Sway Sampling 实测</a> ｜ 代码：<a target="_blank" rel="noopener" href="https://github.com/SWivid/F5-TTS">F5-TTS</a> ｜ 论文：<a target="_blank" rel="noopener" href="https://arxiv.org/abs/2410.06885">arXiv 2410.06885</a></p>
+</blockquote>
+<p>今天第一次把 F5-TTS 真正跑起来，本来只是想克隆一个音色，结果被”语速太快”这件事绊住，然后顺着它一路想到模型结构。这篇把整条链记下来，<strong>重点放在最后那个解耦预测头的想法</strong>。</p>
+<h2 id="一、F5-TTS-是什么（一句话版）"><a href="#一、F5-TTS-是什么（一句话版）" class="headerlink" title="一、F5-TTS 是什么（一句话版）"></a>一、F5-TTS 是什么（一句话版）</h2><p>F5-TTS 是<strong>条件流匹配（CFM）+ DiT</strong> 的非自回归 TTS：</p>
+<ul>
+<li>训练：取真实 mel <code>x1</code> 和高斯噪声 <code>x0</code>，随机时刻 <code>t</code> 构造 <code>x_t=(1−t)x0+t·x1</code>，让网络预测直线速度 <code>v=x1−x0</code>，只对被 mask 的”待生成区”算 MSE。</li>
+<li>推理：从噪声出发，用 ODE 沿学到的速度场积分到 <code>t=1</code>，得到 mel。</li>
+<li>条件：把<strong>参考 mel 和文本一起拼进序列</strong>，参考区被”钉住”不动（in-context infilling）——这就是零样本声音克隆的来源。</li>
+<li>它刻意做得很简：<strong>没有 duration model、没有 text encoder、没有 phoneme alignment</strong>，也没有说话人编码器。</li>
+</ul>
+<p>这几条代码里都能对上：<code>cfm.py</code> 的 <code>forward</code> &#x2F; <code>sample</code> 是训练和推理两个入口，<code>dit.py:202</code> 把 <code>[带噪mel | cond | 文本]</code> 三路拼成一个序列。</p>
+<h2 id="二、跑起来：参考音频、文本、时长的三角关系"><a href="#二、跑起来：参考音频、文本、时长的三角关系" class="headerlink" title="二、跑起来：参考音频、文本、时长的三角关系"></a>二、跑起来：参考音频、文本、时长的三角关系</h2><p>跑通了，但踩了两个坑，正好把问题暴露出来。</p>
+<h3 id="坑-1：参考音频被截断，但参考文本没截"><a href="#坑-1：参考音频被截断，但参考文本没截" class="headerlink" title="坑 1：参考音频被截断，但参考文本没截"></a>坑 1：参考音频被截断，但参考文本没截</h3><p><code>utils_infer.py:325</code> 会把超过 12s 的参考音频<strong>自动截短到 12s</strong>，但如果你给的 <code>ref_text</code> 是整段 23s 的转写，两者就对不上了。</p>
+<p>F5 的时长是这么估的（<code>utils_infer.py:503</code>）：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">duration = ref_audio_len + <span class="built_in">int</span>(ref_audio_len / ref_text_len * gen_text_len / local_speed)</span><br></pre></td></tr></table></figure>
+
+<p><code>ref_audio_len</code> 只有 12s 的帧数，<code>ref_text_len</code> 却是 23s 文本的长度 → 每字节对应帧数被低估约一半 → 生成只有应有长度的一半。<strong>11s 的文本生成了 5s，听起来飞快。</strong></p>
+<h3 id="坑-2：参考有停顿、文本又短，反而生成超长"><a href="#坑-2：参考有停顿、文本又短，反而生成超长" class="headerlink" title="坑 2：参考有停顿、文本又短，反而生成超长"></a>坑 2：参考有停顿、文本又短，反而生成超长</h3><p>换成另一段 10.14s 的参考，文本只有 16 字。一量发现：<strong>有效人声只有 6.9s，中间夹了 3.2s 停顿</strong>。模型按”10.14s &#x2F; 16 字”估语速，于是 50 字的生成直接拖到 <strong>30.6s</strong>。</p>
+<p>这告诉我们一件很关键的事：</p>
+<blockquote>
+<p><strong>F5 的”语速”是从参考音频的 <code>帧数/文本长度</code> 反推出来的。</strong> 参考里有多少停顿、文本和音频对不对得上，会一比一地转移到生成结果上。</p>
+</blockquote>
+<p>短期只能补偿：<code>speed</code>（全局缩放）、<code>fix_duration</code>（直接给总时长）。但都是治标。</p>
+<h2 id="三、根因：F5-根本没有”时长建模”"><a href="#三、根因：F5-根本没有”时长建模”" class="headerlink" title="三、根因：F5 根本没有”时长建模”"></a>三、根因：F5 根本没有”时长建模”</h2><p>顺着上面往下想，会发现 F5 缺的不是某个参数，而是<strong>一个独立的”我该说多长”的机制</strong>。这里有三个容易混的”进度轴”：</p>
+<table>
+<thead>
+<tr>
+<th>轴</th>
+<th>含义</th>
+<th>在 F5 里</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>流时间 <code>t</code></td>
+<td>从噪声去噪到哪一步</td>
+<td><code>[0,1]</code>，本来就归一化；通过 <code>TimestepEmbedding</code> 注入</td>
+</tr>
+<tr>
+<td>位置</td>
+<td>生成到第几帧</td>
+<td>由 RoPE 编码（普通、未归一化）</td>
+</tr>
+<tr>
+<td>时长 &#x2F; 任务进度</td>
+<td>这句话总共多长</td>
+<td><strong>没有显式建模</strong>，靠参考比例猜</td>
+</tr>
+</tbody></table>
+<ul>
+<li>把<strong>流时间 <code>t</code></strong> 再归一化 → 只是换采样时刻表，那就是 <strong>Sway Sampling</strong>（<code>cfm.py:263</code>），影响采样质量，不影响时长。</li>
+<li>把<strong>位置</strong>归一化 <code>i/L</code>，并把 <code>L</code> 暴露成可控输入 → 这正是 <strong>VoiceStar 的 PM-RoPE</strong>：用”完成百分之多少”取代绝对位置，从而实现时长控制 + 长音频外推。</li>
+</ul>
+<p>也就是说：<strong>想让 F5 更好控时长，该动的是”时长”，而不是 RoPE、也不是流时间 <code>t</code>。</strong></p>
+<h2 id="四、时长控制的三条路"><a href="#四、时长控制的三条路" class="headerlink" title="四、时长控制的三条路"></a>四、时长控制的三条路</h2><table>
+<thead>
+<tr>
+<th>层次</th>
+<th>做法</th>
+<th>成本</th>
+<th>粒度</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>免训练</td>
+<td>参考 VAD 剪停顿 + 准确转写 + <code>fix_duration</code> &#x2F; <code>speed</code></td>
+<td>极低</td>
+<td>只能控总长</td>
+</tr>
+<tr>
+<td>工程改进</td>
+<td>用<strong>学出来的 duration predictor</strong> 替换比例启发式</td>
+<td>低</td>
+<td>整句时长</td>
+</tr>
+<tr>
+<td>研究级</td>
+<td>把时长&#x2F;语速做成<strong>条件输入</strong> + 时长增强训练</td>
+<td>中</td>
+<td>整句→字级</td>
+</tr>
+</tbody></table>
+<p>这也是我后面那个想法的起点。</p>
+<h2 id="五、当前零样本-小样本-TTS-速览（2025–2026）"><a href="#五、当前零样本-小样本-TTS-速览（2025–2026）" class="headerlink" title="五、当前零样本 &#x2F; 小样本 TTS 速览（2025–2026）"></a>五、当前零样本 &#x2F; 小样本 TTS 速览（2025–2026）</h2><p>零样本这块这两年非常卷，但<strong>没有单一”最好”，看维度</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>架构</th>
+<th>强项</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>IndexTTS 2 &#x2F; 2.5</td>
+<td>AR + FM</td>
+<td>时长&#x2F;情感<strong>解耦</strong>，韵律可控</td>
+</tr>
+<tr>
+<td>CosyVoice 2 &#x2F; 3</td>
+<td>AR LLM + FM</td>
+<td>流式低延迟、多语言、指令&#x2F;标签控制</td>
+</tr>
+<tr>
+<td>MegaTTS 3</td>
+<td>Latent Diffusion</td>
+<td>音色相似、口音强度可控</td>
+</tr>
+<tr>
+<td>Seed-TTS &#x2F; MiniMax</td>
+<td>AR&#x2F;混合</td>
+<td>综合最强（多为闭源）</td>
+</tr>
+<tr>
+<td><strong>VoiceStar</strong></td>
+<td>AR</td>
+<td><strong>显式时长控制 + 长音频外推（PM-RoPE）</strong></td>
+</tr>
+<tr>
+<td>F5-TTS &#x2F; E2-TTS</td>
+<td>NAR FM</td>
+<td>简洁、鲁棒、易训（我在用的）</td>
+</tr>
+</tbody></table>
+<p>小样本现在基本不”从零训练”了，而是**零样本 + 少量数据微调（LoRA&#x2F;adapter）**做说话人适配。</p>
+<p>顺带一提：同组的 <strong>X-Voice</strong>（arXiv 2605.05611）直接<strong>在 F5-TTS 上扩展</strong>——多语言、免参考转写，还加了语言注入和<strong>解耦的 CFG</strong>。说明”给 F5 加可控性”这条线是有人在做、且认可的。</p>
+<h2 id="六、F5-没有解耦——这是空位"><a href="#六、F5-没有解耦——这是空位" class="headerlink" title="六、F5 没有解耦——这是空位"></a>六、F5 没有解耦——这是空位</h2><p>我在代码里确认了一遍：模型里没有 speaker &#x2F; pitch &#x2F; energy &#x2F; variance 任何预测头。DiT 的输入只有 <code>cond</code>、文本、<code>t</code>，输出只有速度场；<code>trainer.py:154</code> 那个 <code>duration_predictor</code> 钩子注释明写”目前未启用训练”。</p>
+<p>后果就是：<strong>音色、内容、韵律、时长全部纠缠在同一份 in-context 表示里，无法独立控制</strong>。想”同音色、只改语速”，F5 做不到。</p>
+<p>这既是它目前不好控的原因，<strong>也正是最容易切入做改进的地方</strong>。</p>
+<h2 id="七、我的想法：解耦多预测头-→-条件化下游生成器"><a href="#七、我的想法：解耦多预测头-→-条件化下游生成器" class="headerlink" title="七、我的想法：解耦多预测头 → 条件化下游生成器"></a>七、我的想法：解耦多预测头 → 条件化下游生成器</h2><p>思路一句话：<strong>先解耦地预测出韵律（时长、音高、能量……），再把这些预测当成条件，塞给下游的流匹配生成器。</strong></p>
+<h3 id="1-架构"><a href="#1-架构" class="headerlink" title="1. 架构"></a>1. 架构</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">              ┌──────────────┐</span><br><span class="line">text  ───────▶│  文本编码器   │──┐</span><br><span class="line">              └──────────────┘  │</span><br><span class="line">              ┌──────────────┐  │   ┌──────────────────────┐</span><br><span class="line">ref   ───────▶│ 参考/风格编码 │──┼──▶│ 多个预测头            │</span><br><span class="line">              └──────────────┘  │   │ duration / F0 / energy│</span><br><span class="line">                                │   │ (+ style/emotion)     │──▶ 条件向量</span><br><span class="line">                                │   └──────────────────────┘</span><br><span class="line">                                │              │</span><br><span class="line">                              文本             ▼（作为条件注入）</span><br><span class="line">                      ┌──────────────────────────────────┐</span><br><span class="line">                      │   流匹配生成器 (DiT / CFM)         │──▶ mel ──▶ vocoder</span><br><span class="line">                      └──────────────────────────────────┘</span><br></pre></td></tr></table></figure>
+
+<p>它其实是把 F5 缺失的 <strong>duration model</strong> 补回来，并且顺便把 <strong>variance adaptor</strong>（FastSpeech 2 的时长&#x2F;音高&#x2F;能量预测器）搬进流匹配的零样本框架里。</p>
+<h3 id="2-训练-推理"><a href="#2-训练-推理" class="headerlink" title="2. 训练 &#x2F; 推理"></a>2. 训练 &#x2F; 推理</h3><ul>
+<li><strong>监督来源</strong>：时长用强制对齐（MFA &#x2F; ctc-forced-aligner）得到帧级时长；F0 用 pyworld&#x2F;parselmouth 提基频；能量用 RMS。<strong>每个头用真值监督。</strong></li>
+<li><strong>生成器</strong>：训练时用<strong>真值条件</strong>（teacher forcing），推理时用<strong>预测条件</strong>。</li>
+<li><strong>注入方式</strong>：可以像时间步 <code>t</code> 一样走 AdaLN 调制，也可以直接拼进输入嵌入；每个条件还能配独立的 CFG。</li>
+</ul>
+<h3 id="3-和既有工作的关系"><a href="#3-和既有工作的关系" class="headerlink" title="3. 和既有工作的关系"></a>3. 和既有工作的关系</h3><p>这不是全新范式——FastSpeech 2 &#x2F; NaturalSpeech 早就用 variance adaptor，IndexTTS 2 做了时长&#x2F;情感解耦，VoiceStar 用 PM-RoPE 在 AR 上做时长控制。<strong>空位在于：把它做进”非自回归 + 流匹配 + 零样本克隆”这个组合里，并且把解耦做干净。</strong> F5 恰好是 NAR，能和 AR 系（VoiceStar 那类）形成对照。</p>
+<h3 id="4-三个真正的难点"><a href="#4-三个真正的难点" class="headerlink" title="4. 三个真正的难点"></a>4. 三个真正的难点</h3><ol>
+<li><strong>监督从哪来</strong>：对齐、F0、能量的提取比”音频对”麻烦，且对齐误差会传下去。</li>
+<li><strong>训练 &#x2F; 推理不一致</strong>：训练喂真值、推理喂预测，预测有误差就会掉质量。要处理（按概率混用预测值、条件 dropout、给每个条件配 CFG）。</li>
+<li><strong>解耦的泄漏</strong>（最要命）：时长和内容强相关、音高和说话人强相关。naive 地多接几个头，很容易把”说话人身份”漏进音高、”语速”漏进情感，结果”换音色时韵律跟着变”。<strong>能不能干净解耦，才是这类工作的卖点。</strong> 数据层面的解法见下面第 5 小节。</li>
+<li><strong>一对多</strong>：韵律从文本不可唯一确定（同一句话有很多种说法），所以要么加风格&#x2F;情感条件，要么允许采样。</li>
+</ol>
+<h3 id="5-解耦光靠架构不够，还得靠数据增强"><a href="#5-解耦光靠架构不够，还得靠数据增强" class="headerlink" title="5. 解耦光靠架构不够，还得靠数据增强"></a>5. 解耦光靠架构不够，还得靠数据增强</h3><p>上面说的”泄漏”，解法其实很便宜：给训练数据做<strong>语速扰动增广</strong>。同一句音频用 0.8、1.2 这类因子做时间伸缩，文本保持不变。这样一来，”同一个人说话有快有慢”就成了事实，模型没法再用语速去猜说话人，时长头也只能老老实实看着文本来预测。</p>
+<p>两个要注意的地方：</p>
+<ul>
+<li>每句随机挑一个因子就够了，不用每句话做好几个版本，数据量控制在一倍多一点；</li>
+<li>伸缩要用<strong>保音高的 tempo</strong>（sox 的 <code>tempo</code> 效果，或 torchaudio 的 phase vocoder），别用 <code>speed</code>——<code>speed</code> 变速的同时也变调，音高一变音色就变了，等于亲手把说话人标签弄脏。</li>
+</ul>
+<h2 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h2><ol>
+<li><strong>F5 的”语速”是从参考音频比例反推的</strong>，参考里有多少停顿、音文对不对得上，会一比一转移到生成结果——这是今天所有坑的根因。</li>
+<li>想控时长，别去碰流时间 <code>t</code>（那等于 Sway Sampling）；该建的是<strong>独立的时长机制</strong>：短中期用 duration predictor，长期把它变成条件。</li>
+<li><strong>F5 在解耦度上是”零”</strong>：没有 speaker&#x2F;pitch&#x2F;energy 头，音色&#x2F;内容&#x2F;韵律&#x2F;时长全部纠缠。</li>
+<li><strong>我的思路</strong>：加<strong>解耦的韵律预测头（时长&#x2F;音高&#x2F;能量）→ 当条件喂给下游流匹配生成器</strong>。范式成熟（variance adaptor），但”零样本 + NAR + 流匹配 + 干净解耦”这个组合有空位。</li>
+<li>难点不在”能不能加头”，而在<strong>监督来源、训练&#x2F;推理一致、以及解耦不泄漏</strong>——把这三件解决，就是一个像样的课题。</li>
+<li><strong>解耦泄漏在数据层面有个便宜的抓手</strong>：语速扰动增广（保音高的 tempo），每句随机一个伸缩因子、数据翻倍以内就能打破”语速↔音色”的相关性。</li>
+</ol>
+<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="F5-的时长估算（要替换的目标）"><a href="#F5-的时长估算（要替换的目标）" class="headerlink" title="F5 的时长估算（要替换的目标）"></a>F5 的时长估算（要替换的目标）</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># utils_infer.py:503</span></span><br><span class="line">ref_text_len = <span class="built_in">len</span>(ref_text.encode(<span class="string">&quot;utf-8&quot;</span>))</span><br><span class="line">gen_text_len = <span class="built_in">len</span>(gen_text.encode(<span class="string">&quot;utf-8&quot;</span>))</span><br><span class="line">duration = ref_audio_len + <span class="built_in">int</span>(ref_audio_len / ref_text_len * gen_text_len / local_speed)</span><br></pre></td></tr></table></figure>
+
+<h3 id="参考音频-12s-会被截断（坑的来源）"><a href="#参考音频-12s-会被截断（坑的来源）" class="headerlink" title="参考音频 &gt;12s 会被截断（坑的来源）"></a>参考音频 &gt;12s 会被截断（坑的来源）</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># utils_infer.py:325</span></span><br><span class="line"><span class="keyword">if</span> <span class="built_in">len</span>(non_silent_wave) &gt; <span class="number">6000</span> <span class="keyword">and</span> <span class="built_in">len</span>(non_silent_wave + non_silent_seg) &gt; <span class="number">12000</span>:</span><br><span class="line">    show_info(<span class="string">&quot;Audio is over 12s, clipping short. (1)&quot;</span>)</span><br><span class="line">    <span class="keyword">break</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="Sway-Sampling：改的是流时间-t-的分布"><a href="#Sway-Sampling：改的是流时间-t-的分布" class="headerlink" title="Sway Sampling：改的是流时间 t 的分布"></a>Sway Sampling：改的是流时间 t 的分布</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># cfm.py:263</span></span><br><span class="line"><span class="keyword">if</span> sway_sampling_coef <span class="keyword">is</span> <span class="keyword">not</span> <span class="literal">None</span>:</span><br><span class="line">    t = t + sway_sampling_coef * (torch.cos(torch.pi / <span class="number">2</span> * t) - <span class="number">1</span> + t)</span><br></pre></td></tr></table></figure>
+
+<h3 id="RoPE-的注入点（普通、未归一化）"><a href="#RoPE-的注入点（普通、未归一化）" class="headerlink" title="RoPE 的注入点（普通、未归一化）"></a>RoPE 的注入点（普通、未归一化）</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># dit.py:418 → block → modules.py:601</span></span><br><span class="line">rope = <span class="variable language_">self</span>.rotary_embed.forward_from_seq_len(seq_len)</span><br><span class="line">query = apply_rotary_pos_emb(query, freqs, q_xpos_scale)</span><br><span class="line">key   = apply_rotary_pos_emb(key,   freqs, k_xpos_scale)</span><br></pre></td></tr></table></figure>
+
+<h3 id="注入一个条件（多头的目标形态，仿时间步-t）"><a href="#注入一个条件（多头的目标形态，仿时间步-t）" class="headerlink" title="注入一个条件（多头的目标形态，仿时间步 t）"></a>注入一个条件（多头的目标形态，仿时间步 t）</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 条件向量 c 与时间嵌入一样进入 AdaLN 调制 / 或拼进输入</span></span><br><span class="line">x = <span class="variable language_">self</span>.input_embed(torch.cat((x, cond, text_embed, duration_emb, f0_emb), dim=-<span class="number">1</span>))</span><br></pre></td></tr></table></figure>
+
+<h3 id="语速扰动增广（务必保音高）"><a href="#语速扰动增广（务必保音高）" class="headerlink" title="语速扰动增广（务必保音高）"></a>语速扰动增广（务必保音高）</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 增广只用保音高的 tempo；sox/torchaudio 的 speed 变速又变调，会污染音色标签</span></span><br><span class="line"><span class="keyword">import</span> torch, torchaudio</span><br><span class="line"></span><br><span class="line">wav, sr = torchaudio.load(<span class="string">&quot;utt.wav&quot;</span>)     <span class="comment"># (C, T)</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 方式一：sox tempo（&gt;1 变快，&lt;1 变慢）</span></span><br><span class="line">aug, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, [[<span class="string">&quot;tempo&quot;</span>, <span class="string">&quot;1.15&quot;</span>]])</span><br><span class="line"></span><br><span class="line"><span class="comment"># 方式二：phase vocoder（纯 torch 实现，不依赖 sox，Windows 上更稳）</span></span><br><span class="line">spec = torch.stft(wav, <span class="number">1024</span>, hop_length=<span class="number">256</span>, return_complex=<span class="literal">True</span>)</span><br><span class="line">aug_spec = torchaudio.functional.phase_vocoder(spec, rate=<span class="number">1.15</span>)</span><br><span class="line">aug = torch.istft(aug_spec, <span class="number">1024</span>, hop_length=<span class="number">256</span>)</span><br></pre></td></tr></table></figure>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://captwd.github.io">captwd</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://captwd.github.io/2026/09/13/f5-tts-zero-shot-duration-and-decoupled-heads/">https://captwd.github.io/2026/09/13/f5-tts-zero-shot-duration-and-decoupled-heads/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://captwd.github.io" target="_blank">captwd的笔记</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/F5-TTS/">F5-TTS</a><a class="post-meta__tags" href="/tags/%E6%B5%81%E5%8C%B9%E9%85%8D/">流匹配</a><a class="post-meta__tags" href="/tags/%E9%9B%B6%E6%A0%B7%E6%9C%ACTTS/">零样本TTS</a><a class="post-meta__tags" href="/tags/%E6%97%B6%E9%95%BF%E6%8E%A7%E5%88%B6/">时长控制</a><a class="post-meta__tags" href="/tags/%E8%A7%A3%E8%80%A6/">解耦</a><a class="post-meta__tags" href="/tags/%E6%95%B0%E6%8D%AE%E5%A2%9E%E5%B9%BF/">数据增广</a><a class="post-meta__tags" href="/tags/%E7%A0%94%E7%A9%B6%E6%83%B3%E6%B3%95/">研究想法</a></div><div class="post-share"><div class="social-share" data-image="/img/me.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/09/17/300m-speech-models-learning-rate-reference/" title="300M 量级语音模型学习率速查：一个窄带里的两个世界"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">300M 量级语音模型学习率速查：一个窄带里的两个世界</div></div><div class="info-2"><div class="info-item-1"> 起因：微调 F5-TTS 时对学习率没手感，翻了一圈文献和官方配置，把”300M 附近”的流行语音模型学习率整理成一张速查表。warmup 的理论解释写了一节，其余（batch 换算、语音敏感性分析）后面补。  速查表   模型 参数量 范式 优化器 峰值 LR 调度 &#x2F; warmup    F5-TTS Base 336M NAR 流匹配 TTS AdamW 7.5e-5（官方配置） 2 万步 warmup，grad clip 1.0   VoiceBox (Meta) ~330M NAR 流匹配 infilling Adam 1e-4 500K updates，EMA 权重推理   MegaTTS 3 (字节) 0.45B 潜空间扩散 DiT Adam 1e-4 1 万步 warmup，β&#x3D;0.9&#x2F;0.999   Whisper Small 244M 弱监督 ASR AdamW 1.75e-4 ~2k 步 warmup + 线性衰减到 0   StyleTTS 2 — 扩散 + GAN AdamW 1e-4 两阶段训练，batch 16 句  ...</div></div></div></a><a class="pagination-related" href="/2026/09/13/injecting-statistical-potentials-ideas-and-architecture/" title="给蛋白距离预测注入统计势：想法与模型架构"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">给蛋白距离预测注入统计势：想法与模型架构</div></div><div class="info-2"><div class="info-item-1">深度学习做蛋白质结构预测已经很强了，于是就有个老问题：还需要显式地注入物理先验吗？ 比如从 PDB 里统计出来的统计势（statistical potential of mean force, PMF）。这篇不谈结果，只记一下我在这件事上的想法和模型架构。 一、想法：把”注入有用”拆成三笔账直接从 baseline 跳到”注入真实 PMF”，其实同时改动了三样东西：  架构：多了一个注意力模块，容量变大了； 机制：多了一条偏置信号进入注意力——不管它的数值是什么，都存在一个结构归纳偏置； 内容：这条偏置携带了物理知识（氨基酸对 × 距离的能量偏好）。  这三者在任何”加 vs 不加”的对比里都是混在一起的，所以单看总分根本不知道收益来自哪里。我的想法是设计四个每次只变一个的条件，把账拆开：    条件 变化 逐差得到    Baseline 无轴向注意力、无注入 测量原点   Axial, zero bias 加轴向注意力，偏置固定为 0 架构（模块容量）   Shuffled PMF PMF 的氨基酸标签随机置换 机制（有偏置路径、无内容）   True PMF 完整统计势 内...</div></div></div></a></nav><hr class="custom-hr"/><div id="post-comment"><div class="comment-head"><div class="comment-headline"><i class="fas fa-comments fa-fw"></i><span> 评论</span></div></div><div class="comment-wrap"><div><div id="waline-wrap"></div></div></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/me.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/ loading='lazy'></div><div class="author-info-name">captwd</div><div class="author-info-description"></div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">20</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">47</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/captwd"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/captwd" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a><a class="social-icon" href="mailto:3498376281@qq.com" target="_blank" title="Email"><i class="fas fa-envelope" style="color: #4a7dbe;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">欢迎！</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E3%80%81F5-TTS-%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%88%E4%B8%80%E5%8F%A5%E8%AF%9D%E7%89%88%EF%BC%89"><span class="toc-number">1.</span> <span class="toc-text">一、F5-TTS 是什么（一句话版）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%8C%E3%80%81%E8%B7%91%E8%B5%B7%E6%9D%A5%EF%BC%9A%E5%8F%82%E8%80%83%E9%9F%B3%E9%A2%91%E3%80%81%E6%96%87%E6%9C%AC%E3%80%81%E6%97%B6%E9%95%BF%E7%9A%84%E4%B8%89%E8%A7%92%E5%85%B3%E7%B3%BB"><span class="toc-number">2.</span> <span class="toc-text">二、跑起来：参考音频、文本、时长的三角关系</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%9D%91-1%EF%BC%9A%E5%8F%82%E8%80%83%E9%9F%B3%E9%A2%91%E8%A2%AB%E6%88%AA%E6%96%AD%EF%BC%8C%E4%BD%86%E5%8F%82%E8%80%83%E6%96%87%E6%9C%AC%E6%B2%A1%E6%88%AA"><span class="toc-number">2.1.</span> <span class="toc-text">坑 1：参考音频被截断，但参考文本没截</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%9D%91-2%EF%BC%9A%E5%8F%82%E8%80%83%E6%9C%89%E5%81%9C%E9%A1%BF%E3%80%81%E6%96%87%E6%9C%AC%E5%8F%88%E7%9F%AD%EF%BC%8C%E5%8F%8D%E8%80%8C%E7%94%9F%E6%88%90%E8%B6%85%E9%95%BF"><span class="toc-number">2.2.</span> <span class="toc-text">坑 2：参考有停顿、文本又短，反而生成超长</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%89%E3%80%81%E6%A0%B9%E5%9B%A0%EF%BC%9AF5-%E6%A0%B9%E6%9C%AC%E6%B2%A1%E6%9C%89%E2%80%9D%E6%97%B6%E9%95%BF%E5%BB%BA%E6%A8%A1%E2%80%9D"><span class="toc-number">3.</span> <span class="toc-text">三、根因：F5 根本没有”时长建模”</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%9B%9B%E3%80%81%E6%97%B6%E9%95%BF%E6%8E%A7%E5%88%B6%E7%9A%84%E4%B8%89%E6%9D%A1%E8%B7%AF"><span class="toc-number">4.</span> <span class="toc-text">四、时长控制的三条路</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%94%E3%80%81%E5%BD%93%E5%89%8D%E9%9B%B6%E6%A0%B7%E6%9C%AC-%E5%B0%8F%E6%A0%B7%E6%9C%AC-TTS-%E9%80%9F%E8%A7%88%EF%BC%882025%E2%80%932026%EF%BC%89"><span class="toc-number">5.</span> <span class="toc-text">五、当前零样本 &#x2F; 小样本 TTS 速览（2025–2026）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%85%AD%E3%80%81F5-%E6%B2%A1%E6%9C%89%E8%A7%A3%E8%80%A6%E2%80%94%E2%80%94%E8%BF%99%E6%98%AF%E7%A9%BA%E4%BD%8D"><span class="toc-number">6.</span> <span class="toc-text">六、F5 没有解耦——这是空位</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%83%E3%80%81%E6%88%91%E7%9A%84%E6%83%B3%E6%B3%95%EF%BC%9A%E8%A7%A3%E8%80%A6%E5%A4%9A%E9%A2%84%E6%B5%8B%E5%A4%B4-%E2%86%92-%E6%9D%A1%E4%BB%B6%E5%8C%96%E4%B8%8B%E6%B8%B8%E7%94%9F%E6%88%90%E5%99%A8"><span class="toc-number">7.</span> <span class="toc-text">七、我的想法：解耦多预测头 → 条件化下游生成器</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-%E6%9E%B6%E6%9E%84"><span class="toc-number">7.1.</span> <span class="toc-text">1. 架构</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-%E8%AE%AD%E7%BB%83-%E6%8E%A8%E7%90%86"><span class="toc-number">7.2.</span> <span class="toc-text">2. 训练 &#x2F; 推理</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-%E5%92%8C%E6%97%A2%E6%9C%89%E5%B7%A5%E4%BD%9C%E7%9A%84%E5%85%B3%E7%B3%BB"><span class="toc-number">7.3.</span> <span class="toc-text">3. 和既有工作的关系</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-%E4%B8%89%E4%B8%AA%E7%9C%9F%E6%AD%A3%E7%9A%84%E9%9A%BE%E7%82%B9"><span class="toc-number">7.4.</span> <span class="toc-text">4. 三个真正的难点</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#5-%E8%A7%A3%E8%80%A6%E5%85%89%E9%9D%A0%E6%9E%B6%E6%9E%84%E4%B8%8D%E5%A4%9F%EF%BC%8C%E8%BF%98%E5%BE%97%E9%9D%A0%E6%95%B0%E6%8D%AE%E5%A2%9E%E5%BC%BA"><span class="toc-number">7.5.</span> <span class="toc-text">5. 解耦光靠架构不够，还得靠数据增强</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%B0%8F%E7%BB%93"><span class="toc-number">8.</span> <span class="toc-text">小结</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%85%B3%E9%94%AE%E4%BB%A3%E7%A0%81"><span class="toc-number">9.</span> <span class="toc-text">关键代码</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#F5-%E7%9A%84%E6%97%B6%E9%95%BF%E4%BC%B0%E7%AE%97%EF%BC%88%E8%A6%81%E6%9B%BF%E6%8D%A2%E7%9A%84%E7%9B%AE%E6%A0%87%EF%BC%89"><span class="toc-number">9.1.</span> <span class="toc-text">F5 的时长估算（要替换的目标）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%8F%82%E8%80%83%E9%9F%B3%E9%A2%91-12s-%E4%BC%9A%E8%A2%AB%E6%88%AA%E6%96%AD%EF%BC%88%E5%9D%91%E7%9A%84%E6%9D%A5%E6%BA%90%EF%BC%89"><span class="toc-number">9.2.</span> <span class="toc-text">参考音频 &gt;12s 会被截断（坑的来源）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Sway-Sampling%EF%BC%9A%E6%94%B9%E7%9A%84%E6%98%AF%E6%B5%81%E6%97%B6%E9%97%B4-t-%E7%9A%84%E5%88%86%E5%B8%83"><span class="toc-number">9.3.</span> <span class="toc-text">Sway Sampling：改的是流时间 t 的分布</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#RoPE-%E7%9A%84%E6%B3%A8%E5%85%A5%E7%82%B9%EF%BC%88%E6%99%AE%E9%80%9A%E3%80%81%E6%9C%AA%E5%BD%92%E4%B8%80%E5%8C%96%EF%BC%89"><span class="toc-number">9.4.</span> <span class="toc-text">RoPE 的注入点（普通、未归一化）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%B3%A8%E5%85%A5%E4%B8%80%E4%B8%AA%E6%9D%A1%E4%BB%B6%EF%BC%88%E5%A4%9A%E5%A4%B4%E7%9A%84%E7%9B%AE%E6%A0%87%E5%BD%A2%E6%80%81%EF%BC%8C%E4%BB%BF%E6%97%B6%E9%97%B4%E6%AD%A5-t%EF%BC%89"><span class="toc-number">9.5.</span> <span class="toc-text">注入一个条件（多头的目标形态，仿时间步 t）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E8%AF%AD%E9%80%9F%E6%89%B0%E5%8A%A8%E5%A2%9E%E5%B9%BF%EF%BC%88%E5%8A%A1%E5%BF%85%E4%BF%9D%E9%9F%B3%E9%AB%98%EF%BC%89"><span class="toc-number">9.6.</span> <span class="toc-text">语速扰动增广（务必保音高）</span></a></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/17/hello-world/" title="Hello World">Hello World</a><time datetime="2026-09-17T15:54:54.794Z" title="发表于 2026-09-17 23:54:54">2026-09-17</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/17/emotion-controllable-matcha-tts-with-emotion2vec/" title="给 Matcha-TTS 加情感：emotion2vec 条件注入与 55 万步训练">给 Matcha-TTS 加情感：emotion2vec 条件注入与 55 万步训练</a><time datetime="2026-09-17T03:00:00.000Z" title="发表于 2026-09-17 11:00:00">2026-09-17</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/17/300m-speech-models-learning-rate-reference/" title="300M 量级语音模型学习率速查：一个窄带里的两个世界">300M 量级语音模型学习率速查：一个窄带里的两个世界</a><time datetime="2026-09-17T02:45:00.000Z" title="发表于 2026-09-17 10:45:00">2026-09-17</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/13/f5-tts-zero-shot-duration-and-decoupled-heads/" title="F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法">F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法</a><time datetime="2026-09-13T14:30:00.000Z" title="发表于 2026-09-13 22:30:00">2026-09-13</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/13/injecting-statistical-potentials-ideas-and-architecture/" title="给蛋白距离预测注入统计势：想法与模型架构">给蛋白距离预测注入统计势：想法与模型架构</a><time datetime="2026-09-13T12:00:00.000Z" title="发表于 2026-09-13 20:00:00">2026-09-13</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By captwd</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.2</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.5</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><a id="to_comment" href="#post-comment" title="前往评论"><i class="fas fa-comments"></i></a><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.5"></script><script src="/js/main.js?v=5.5.5"></script><div class="js-pjax"><script>(() => {
+  let initFn = window.walineFn || null
+  const isShuoshuo = GLOBAL_CONFIG_SITE.pageType === 'shuoshuo'
+  const option = null
+
+  const destroyWaline = ele => ele.destroy()
+
+  const initWaline = (Fn, el = document, path = window.location.pathname) => {
+    const waline = Fn({
+      el: el.querySelector('#waline-wrap'),
+      serverURL: '',
+      pageview: false,
+      dark: 'html[data-theme="dark"]',
+      comment: false,
+      ...option,
+      path: isShuoshuo ? path : (option && option.path) || path
+    })
+
+    if (isShuoshuo) {
+      window.shuoshuoComment.destroyWaline = () => {
+        destroyWaline(waline)
+        if (el.children.length) {
+          el.innerHTML = ''
+          el.classList.add('no-comment')
+        }
+      }
+    }
+  }
+
+  const loadWaline = (el, path) => {
+    if (initFn) initWaline(initFn, el, path)
+    else {
+      btf.getCSS('https://cdn.jsdelivr.net/npm/@waline/client@3.15.2/dist/waline.min.css')
+        .then(() => import('https://cdn.jsdelivr.net/npm/@waline/client@3.15.2/dist/waline.min.js'))
+        .then(({ init }) => {
+          initFn = init || Waline.init
+          initWaline(initFn, el, path)
+          window.walineFn = initFn
+        })
+    }
+  }
+
+  if (isShuoshuo) {
+    'Waline' === 'Waline'
+      ? window.shuoshuoComment = { loadComment: loadWaline } 
+      : window.loadOtherComment = loadWaline
+    return
+  }
+
+  if ('Waline' === 'Waline' || !false) {
+    if (false) btf.loadComment(document.getElementById('waline-wrap'),loadWaline)
+    else setTimeout(loadWaline, 0)
+  } else {
+    window.loadOtherComment = loadWaline
+  }
+})()</script></div><video autoplay loop muted playsinline style="position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:-999;opacity:0.8;pointer-events:none;"><source src="/video/live.mp4" type="video/mp4"></video><script src="/mascot/looklook.js"></script><script src="/mascot/arkpets/lazy-load.js"></script><script src="/js/pagination-scroll.js"></script><script id="click-heart" src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/dist/click-heart.min.js" async="async" mobile="false"></script><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>

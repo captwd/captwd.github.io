@@ -1,0 +1,321 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="dark"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>离线预处理缓存：把重复的 CPU 计算移出训练循环 | captwd的笔记</title><meta name="author" content="captwd"><meta name="copyright" content="captwd"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#0d0d0d"><meta name="description" content="离线预处理缓存的实现：方案设计、逐位一致性验证，以及每轮实际省下的时间。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="离线预处理缓存：把重复的 CPU 计算移出训练循环">
+<meta property="og:url" content="https://captwd.github.io/2026/09/04/offline-preprocessing-cache-for-tts-training/index.html">
+<meta property="og:site_name" content="captwd的笔记">
+<meta property="og:description" content="离线预处理缓存的实现：方案设计、逐位一致性验证，以及每轮实际省下的时间。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://captwd.github.io/img/me.png">
+<meta property="article:published_time" content="2026-09-04T04:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-17T15:54:54.795Z">
+<meta property="article:author" content="captwd">
+<meta property="article:tag" content="Matcha-TTS">
+<meta property="article:tag" content="TTS">
+<meta property="article:tag" content="性能优化">
+<meta property="article:tag" content="数据管线">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://captwd.github.io/img/me.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "离线预处理缓存：把重复的 CPU 计算移出训练循环",
+  "url": "https://captwd.github.io/2026/09/04/offline-preprocessing-cache-for-tts-training/",
+  "image": "https://captwd.github.io/img/me.png",
+  "datePublished": "2026-09-04T04:00:00.000Z",
+  "dateModified": "2026-09-17T15:54:54.795Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "captwd",
+      "url": "https://captwd.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/me.png"><link rel="canonical" href="https://captwd.github.io/2026/09/04/offline-preprocessing-cache-for-tts-training/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.5"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '离线预处理缓存：把重复的 CPU 计算移出训练循环',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><style>#web_bg { background: transparent !important; }</style><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/mascot/looklook.css"><meta name="generator" content="Hexo 8.1.2"><link rel="alternate" href="/atom.xml" title="captwd的笔记" type="application/atom+xml">
+</head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/me.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/ loading='lazy'></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">20</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">47</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 文章</span></a></div><div class="menus_item"><a class="site-page" href="/moments/"><i class="fa-fw fas fa-heart"></i><span> 动态</span></a></div><div class="menus_item"><a class="site-page" href="/photos/"><i class="fa-fw fas fa-images"></i><span> 相册</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comments"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/links/"><i class="fa-fw fas fa-link"></i><span> 链接</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/index-bg.webp);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">captwd的笔记</span></a><a class="nav-page-title" href="/"><span class="site-name">离线预处理缓存：把重复的 CPU 计算移出训练循环</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 文章</span></a></div><div class="menus_item"><a class="site-page" href="/moments/"><i class="fa-fw fas fa-heart"></i><span> 动态</span></a></div><div class="menus_item"><a class="site-page" href="/photos/"><i class="fa-fw fas fa-images"></i><span> 相册</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comments"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/links/"><i class="fa-fw fas fa-link"></i><span> 链接</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">离线预处理缓存：把重复的 CPU 计算移出训练循环</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-09-04T04:00:00.000Z" title="发表于 2026-09-04 12:00:00">2026-09-04</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-09-17T15:54:54.795Z" title="更新于 2026-09-17 23:54:54">2026-09-17</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/Matcha-TTS/">Matcha-TTS</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><blockquote>
+<p><strong>系列 · Matcha-TTS 训练手记</strong> ｜ <a href="/series/">目录</a> ｜ 下一篇：<a href="/2026/09/05/matcha-tts-windows-training-pitfalls/">Windows 从零训练踩坑全集</a></p>
+</blockquote>
+<p>训练一个语音模型时，最容易被忽视的浪费是：<strong>每个 epoch 都把同一批音频重新算一遍梅尔谱、重新做一遍音素化</strong>。这个项目里 13100 条 LJSpeech 数据，每轮训练都要在 CPU 上重复上千次 FFT 和调用 espeak，纯属内耗。这篇记录我做的离线预处理缓存方案：思路、实现、验证和收益。</p>
+<h2 id="一、问题：训练循环里藏着一个重复劳动"><a href="#一、问题：训练循环里藏着一个重复劳动" class="headerlink" title="一、问题：训练循环里藏着一个重复劳动"></a>一、问题：训练循环里藏着一个重复劳动</h2><p>原始 Matcha-TTS 的数据管线是这样的（每个 epoch、每条样本）：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">读 wav → 短时傅里叶变换 → mel 滤波器组 → 取对数  (CPU 密集)</span><br><span class="line">文本 → 清洗/规范化 → espeak 音素化              (调用外部进程，慢)</span><br><span class="line">        ↓</span><br><span class="line">    collate 变长序列补零 → 送 GPU</span><br></pre></td></tr></table></figure>
+
+<p>而这两步的输入是<strong>确定性的</strong>——同一批数据、同一套参数，结果永远一样。在 GPU 上训练时，CPU 还在为下一批数据”现磨”这些特征，直接后果是：</p>
+<ul>
+<li>每轮训练时间被拉长（数据准备和 GPU 计算争抢）</li>
+<li>CPU 利用率下不来，磁盘持续读原始 wav</li>
+<li>GPU 经常在等数据，利用率上不去</li>
+</ul>
+<h2 id="二、方案：离线算一次，训练只读结果"><a href="#二、方案：离线算一次，训练只读结果" class="headerlink" title="二、方案：离线算一次，训练只读结果"></a>二、方案：离线算一次，训练只读结果</h2><p>核心思路：<strong>把预处理从”训练循环内”挪到”训练循环外”</strong>，训练时只做”读现成文件 + collate”。</p>
+<h3 id="组件一：离线预处理脚本（新增）"><a href="#组件一：离线预处理脚本（新增）" class="headerlink" title="组件一：离线预处理脚本（新增）"></a>组件一：离线预处理脚本（新增）</h3><p><code>scripts/preprocess_dataset.py</code> 负责一次性把整个数据集处理完：</p>
+<table>
+<thead>
+<tr>
+<th>能力</th>
+<th>设计</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>存储</td>
+<td>梅尔谱存 <code>cache/mel/*.npy</code>；音素序列存 <code>cache/phonemes.json</code>；处理参数存 <code>cache/meta.json</code></td>
+</tr>
+<tr>
+<td>并行</td>
+<td>多进程（实测 8 进程）</td>
+</tr>
+<tr>
+<td>断点续跑</td>
+<td>已处理的样本跳过，中断后重跑不浪费</td>
+</tr>
+<tr>
+<td>参数校验</td>
+<td><code>meta.json</code> 记录 mel 参数，供训练时比对</td>
+</tr>
+</tbody></table>
+<p>13100 条数据，<strong>8 进程处理仅 47 秒</strong>，产出约 2.2GB 缓存。</p>
+<h3 id="组件二：数据集类的缓存命中逻辑（改造）"><a href="#组件二：数据集类的缓存命中逻辑（改造）" class="headerlink" title="组件二：数据集类的缓存命中逻辑（改造）"></a>组件二：数据集类的缓存命中逻辑（改造）</h3><p><code>TextMelDataset</code> 增加一层判断：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">启动时读取 cache/meta.json</span><br><span class="line">  ├─ 参数与当前配置一致 → 启用缓存</span><br><span class="line">  └─ 不一致           → 自动禁用 + 告警（回退现场计算）</span><br><span class="line">每条样本：</span><br><span class="line">  ├─ 命中缓存 → 直接读 .npy / phonemes.json</span><br><span class="line">  └─ 未命中   → 回退到原来的现场计算</span><br></pre></td></tr></table></figure>
+
+<p>两个设计细节很关键：</p>
+<ol>
+<li><strong>参数不一致时自动禁用而不是报错</strong>——换采样率&#x2F;hop&#x2F; mel 维数时不会静默用错缓存，也不会把训练卡死</li>
+<li><strong>未命中自动回退</strong>——缓存不完整时训练照样能跑，只是慢一点</li>
+</ol>
+<h2 id="三、验证：缓存必须与现场计算逐位一致"><a href="#三、验证：缓存必须与现场计算逐位一致" class="headerlink" title="三、验证：缓存必须与现场计算逐位一致"></a>三、验证：缓存必须与现场计算逐位一致</h2><p>这是最容易翻车的地方：如果缓存和现场计算有细微不一致，模型学到的分布就悄悄变了，而且很难发现。</p>
+<p>验证方法：抽 6 个样本，分别在”缓存路径”和”现场计算路径”下取出音素序列、清洗文本和梅尔谱，逐个做<strong>逐位比对</strong>——结果完全一致。</p>
+<h2 id="四、收益：每轮省下约-30-秒，磁盘”退休”"><a href="#四、收益：每轮省下约-30-秒，磁盘”退休”" class="headerlink" title="四、收益：每轮省下约 30 秒，磁盘”退休”"></a>四、收益：每轮省下约 30 秒，磁盘”退休”</h2><table>
+<thead>
+<tr>
+<th>指标</th>
+<th>改善前</th>
+<th>改善后</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>每轮训练时间</td>
+<td>—</td>
+<td>每轮大约快 30 秒</td>
+</tr>
+<tr>
+<td>磁盘读训练数据</td>
+<td>每轮持续读 wav</td>
+<td>首轮读一次后进入页缓存，之后几乎为零</td>
+</tr>
+<tr>
+<td>CPU 数据准备负载</td>
+<td>持续有 mel 计算</td>
+<td>只剩 collate</td>
+</tr>
+<tr>
+<td>worker 内存</td>
+<td>每个 worker 持数据集 + 现算</td>
+<td>可降到 2 个（验证集 0 个）</td>
+</tr>
+</tbody></table>
+<p>关于”磁盘退休”的原理值得一提：操作系统会把读过的文件内容自动留在空闲内存里（页缓存），几 GB 的 <code>.npy</code> 第一次读进来之后，后续每个 epoch 都是<strong>纯内存命中</strong>。所以你会看到一个反直觉的现象：训练一整晚，磁盘几乎不干活。</p>
+<h2 id="五、踩过的两个坑"><a href="#五、踩过的两个坑" class="headerlink" title="五、踩过的两个坑"></a>五、踩过的两个坑</h2><h3 id="坑-1：运行预处理脚本前必须设置-espeak-环境变量"><a href="#坑-1：运行预处理脚本前必须设置-espeak-环境变量" class="headerlink" title="坑 1：运行预处理脚本前必须设置 espeak 环境变量"></a>坑 1：运行预处理脚本前必须设置 espeak 环境变量</h3><p>脚本 <code>import cleaners</code> 时就会初始化 phonemizer，需要系统级 espeak-ng 与 <code>PHONEMIZER_ESPEAK_LIBRARY</code> &#x2F; <code>PHONEMIZER_ESPEAK_PATH</code>。忘了设就会在启动阶段直接报错。</p>
+<h3 id="坑-2：缓存目录是训练必需品，别乱挪"><a href="#坑-2：缓存目录是训练必需品，别乱挪" class="headerlink" title="坑 2：缓存目录是训练必需品，别乱挪"></a>坑 2：缓存目录是训练必需品，别乱挪</h3><p>我曾把 cache 文件夹剪切到项目外”想省空间”，结果训练直接找不到缓存。同盘移动并不省空间，缓存是训练依赖——<strong>它就像编译产物，可以删可以重建，但训练时必须在对的位置</strong>。</p>
+<h2 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h2><p>这个改动的核心很简单：把确定性的 CPU 计算从训练循环里挪出去，只算一次。除了省时间，它还顺带解决了三件事：</p>
+<ol>
+<li>磁盘 IO 从持续负载降到几乎为零（页缓存接管）</li>
+<li>CPU 从”边算边喂”变成只负责调度</li>
+<li>内存压力下降，worker 数量可以砍到最小</li>
+</ol>
+<p>代码量不大，但把训练从”数据饥饿”里解放了出来，是整个项目里性价比最高的一处改动。</p>
+<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="1-预处理脚本：单个样本的-mel-音素"><a href="#1-预处理脚本：单个样本的-mel-音素" class="headerlink" title="1. 预处理脚本：单个样本的 mel + 音素"></a>1. 预处理脚本：单个样本的 mel + 音素</h3><p>计算逻辑与 <code>TextMelDataset.get_mel</code> &#x2F; <code>get_text</code> 逐行保持一致，这样缓存和现场计算的结果才可比。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">process_one</span>(<span class="params">item, params</span>):</span><br><span class="line">    filepath, text = item</span><br><span class="line">    stem = Path(filepath).stem</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 断点续跑：已经算过的样本直接跳过</span></span><br><span class="line">    <span class="keyword">if</span> (params[<span class="string">&quot;mel_dir&quot;</span>] / <span class="string">f&quot;<span class="subst">&#123;stem&#125;</span>.npy&quot;</span>).exists() <span class="keyword">and</span> stem <span class="keyword">in</span> params[<span class="string">&quot;done&quot;</span>]:</span><br><span class="line">        <span class="keyword">return</span> stem, <span class="literal">None</span></span><br><span class="line"></span><br><span class="line">    <span class="comment"># 梅尔频谱</span></span><br><span class="line">    audio, sr = ta.load(filepath)</span><br><span class="line">    mel = mel_spectrogram(</span><br><span class="line">        audio,</span><br><span class="line">        params[<span class="string">&quot;n_fft&quot;</span>], params[<span class="string">&quot;n_feats&quot;</span>], params[<span class="string">&quot;sample_rate&quot;</span>],</span><br><span class="line">        params[<span class="string">&quot;hop_length&quot;</span>], params[<span class="string">&quot;win_length&quot;</span>],</span><br><span class="line">        params[<span class="string">&quot;f_min&quot;</span>], params[<span class="string">&quot;f_max&quot;</span>], center=<span class="literal">False</span>,</span><br><span class="line">    ).squeeze()</span><br><span class="line">    mel = normalize(mel, params[<span class="string">&quot;mel_mean&quot;</span>], params[<span class="string">&quot;mel_std&quot;</span>])</span><br><span class="line">    np.save(params[<span class="string">&quot;mel_dir&quot;</span>] / <span class="string">f&quot;<span class="subst">&#123;stem&#125;</span>.npy&quot;</span>, mel.cpu().numpy().astype(np.float32))</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 文本 -&gt; 音素 ID</span></span><br><span class="line">    seq, cleaned = text_to_sequence(text, <span class="built_in">list</span>(params[<span class="string">&quot;cleaners&quot;</span>]))</span><br><span class="line">    <span class="keyword">if</span> params[<span class="string">&quot;add_blank&quot;</span>]:</span><br><span class="line">        seq = intersperse(seq, <span class="number">0</span>)</span><br><span class="line">    <span class="keyword">return</span> stem, &#123;<span class="string">&quot;x&quot;</span>: [<span class="built_in">int</span>(i) <span class="keyword">for</span> i <span class="keyword">in</span> seq], <span class="string">&quot;text&quot;</span>: cleaned&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="2-多进程跑完，把参数写进-meta-json"><a href="#2-多进程跑完，把参数写进-meta-json" class="headerlink" title="2. 多进程跑完，把参数写进 meta.json"></a>2. 多进程跑完，把参数写进 meta.json</h3><p><code>meta.json</code> 是给训练侧做参数校验用的，避免配置改了还在用旧缓存。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">with</span> ProcessPoolExecutor(max_workers=args.workers) <span class="keyword">as</span> ex:</span><br><span class="line">    <span class="keyword">for</span> stem, result <span class="keyword">in</span> tqdm(ex.<span class="built_in">map</span>(process_one, todo, [params] * <span class="built_in">len</span>(todo)), total=<span class="built_in">len</span>(todo)):</span><br><span class="line">        <span class="keyword">if</span> result <span class="keyword">is</span> <span class="keyword">not</span> <span class="literal">None</span>:</span><br><span class="line">            phonemes[stem] = result</span><br><span class="line"></span><br><span class="line">ph_path.write_text(json.dumps(phonemes, ensure_ascii=<span class="literal">False</span>), encoding=<span class="string">&quot;utf-8&quot;</span>)</span><br><span class="line">meta = &#123;k: v <span class="keyword">for</span> k, v <span class="keyword">in</span> params.items() <span class="keyword">if</span> k <span class="keyword">not</span> <span class="keyword">in</span> (<span class="string">&quot;mel_dir&quot;</span>, <span class="string">&quot;done&quot;</span>)&#125;</span><br><span class="line">meta[<span class="string">&quot;version&quot;</span>] = <span class="number">1</span></span><br><span class="line">(cache_dir / <span class="string">&quot;meta.json&quot;</span>).write_text(json.dumps(meta, ensure_ascii=<span class="literal">False</span>, indent=<span class="number">2</span>), encoding=<span class="string">&quot;utf-8&quot;</span>)</span><br></pre></td></tr></table></figure>
+
+<h3 id="3-训练侧：启动时校验参数，对不上就禁用缓存"><a href="#3-训练侧：启动时校验参数，对不上就禁用缓存" class="headerlink" title="3. 训练侧：启动时校验参数，对不上就禁用缓存"></a>3. 训练侧：启动时校验参数，对不上就禁用缓存</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">_load_preprocess_cache</span>(<span class="params">self</span>):</span><br><span class="line">    <span class="keyword">if</span> <span class="keyword">not</span> (meta_path.exists() <span class="keyword">and</span> ph_path.exists()):</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">False</span>, <span class="literal">None</span></span><br><span class="line"></span><br><span class="line">    meta = json.loads(meta_path.read_text(encoding=<span class="string">&quot;utf-8&quot;</span>))</span><br><span class="line">    expected = &#123;</span><br><span class="line">        <span class="string">&quot;n_fft&quot;</span>: <span class="variable language_">self</span>.n_fft, <span class="string">&quot;n_feats&quot;</span>: <span class="variable language_">self</span>.n_mels, <span class="string">&quot;sample_rate&quot;</span>: <span class="variable language_">self</span>.sample_rate,</span><br><span class="line">        <span class="string">&quot;hop_length&quot;</span>: <span class="variable language_">self</span>.hop_length, <span class="string">&quot;win_length&quot;</span>: <span class="variable language_">self</span>.win_length,</span><br><span class="line">        <span class="string">&quot;f_min&quot;</span>: <span class="variable language_">self</span>.f_min, <span class="string">&quot;f_max&quot;</span>: <span class="variable language_">self</span>.f_max,</span><br><span class="line">        <span class="string">&quot;mel_mean&quot;</span>: <span class="variable language_">self</span>.data_parameters[<span class="string">&quot;mel_mean&quot;</span>], <span class="string">&quot;mel_std&quot;</span>: <span class="variable language_">self</span>.data_parameters[<span class="string">&quot;mel_std&quot;</span>],</span><br><span class="line">        <span class="string">&quot;cleaners&quot;</span>: <span class="variable language_">self</span>.cleaners, <span class="string">&quot;add_blank&quot;</span>: <span class="variable language_">self</span>.add_blank,</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">for</span> key, value <span class="keyword">in</span> expected.items():</span><br><span class="line">        <span class="keyword">if</span> <span class="keyword">not</span> _<span class="keyword">match</span>(meta.get(key), value):          <span class="comment"># 数值用 math.isclose，其余直接比较</span></span><br><span class="line">            warnings.warn(<span class="string">f&quot;预处理缓存参数与当前配置不一致(<span class="subst">&#123;key&#125;</span>)，已禁用缓存，将现场计算&quot;</span>)</span><br><span class="line">            <span class="keyword">return</span> <span class="literal">False</span>, <span class="literal">None</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="literal">True</span>, json.loads(ph_path.read_text(encoding=<span class="string">&quot;utf-8&quot;</span>))</span><br></pre></td></tr></table></figure>
+
+<h3 id="4-取数据：优先读缓存，未命中回退原逻辑"><a href="#4-取数据：优先读缓存，未命中回退原逻辑" class="headerlink" title="4. 取数据：优先读缓存，未命中回退原逻辑"></a>4. 取数据：优先读缓存，未命中回退原逻辑</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">get_mel</span>(<span class="params">self, filepath</span>):</span><br><span class="line">    cache_file = <span class="variable language_">self</span>.cache_dir / <span class="string">&quot;mel&quot;</span> / <span class="string">f&quot;<span class="subst">&#123;Path(filepath).stem&#125;</span>.npy&quot;</span></span><br><span class="line">    <span class="keyword">if</span> <span class="variable language_">self</span>._cache_ok <span class="keyword">and</span> cache_file.exists():</span><br><span class="line">        <span class="keyword">return</span> torch.from_numpy(np.load(cache_file))</span><br><span class="line">    ...  <span class="comment"># 原逻辑：读 wav -&gt; FFT -&gt; mel</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># get_datapoint 里的音素部分</span></span><br><span class="line"><span class="keyword">if</span> <span class="variable language_">self</span>.phoneme_cache <span class="keyword">is</span> <span class="keyword">not</span> <span class="literal">None</span> <span class="keyword">and</span> utt_id <span class="keyword">in</span> <span class="variable language_">self</span>.phoneme_cache:</span><br><span class="line">    cached = <span class="variable language_">self</span>.phoneme_cache[utt_id]</span><br><span class="line">    text, cleaned_text = torch.IntTensor(cached[<span class="string">&quot;x&quot;</span>]), cached[<span class="string">&quot;text&quot;</span>]</span><br><span class="line"><span class="keyword">else</span>:</span><br><span class="line">    text, cleaned_text = <span class="variable language_">self</span>.get_text(text, add_blank=<span class="variable language_">self</span>.add_blank)</span><br></pre></td></tr></table></figure>
+
+<p>完整实现见仓库里的 <code>scripts/preprocess_dataset.py</code> 和 <code>matcha/data/text_mel_datamodule.py</code>。</p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://captwd.github.io">captwd</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://captwd.github.io/2026/09/04/offline-preprocessing-cache-for-tts-training/">https://captwd.github.io/2026/09/04/offline-preprocessing-cache-for-tts-training/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://captwd.github.io" target="_blank">captwd的笔记</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/TTS/">TTS</a><a class="post-meta__tags" href="/tags/%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96/">性能优化</a><a class="post-meta__tags" href="/tags/Matcha-TTS/">Matcha-TTS</a><a class="post-meta__tags" href="/tags/%E6%95%B0%E6%8D%AE%E7%AE%A1%E7%BA%BF/">数据管线</a></div><div class="post-share"><div class="social-share" data-image="/img/me.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/09/05/matcha-tts-windows-training-pitfalls/" title="Windows 从零训练 Matcha-TTS 的踩坑全集"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">Windows 从零训练 Matcha-TTS 的踩坑全集</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：离线预处理缓存方案 ｜ 下一篇：硬件原理入门  这是整个 Matcha-TTS 训练手记的第一篇：在一台 RTX 5060 Laptop（8GB 显存）+ 16GB 内存的 Windows 笔记本上，从克隆代码到第一次成功合成语音，踩过的坑和它们的解法。后来项目迁移到了 WSL2 并用上了 Mamba 骨干（另有专题），但这一篇里的坑大多是平台无关的，值得单独记录。 一、安装与环境1. 装什么、怎么装代码 clone 到本地即可，不需要 pip install git+...；只需要在仓库根目录 pip install -e .，作用是：装依赖 + 编译 Cython 对齐模块 + 注册命令行工具。国内网络建议换清华源，必要时配 --no-build-isolation。 2. 缺 MSVC 编译器，Cython 模块编译失败1error: Microsoft Visual C++ 14.0 or greater is required  matcha.utils.monotonic_align.core 是 Cy...</div></div></div></a><a class="pagination-related" href="/2026/07/07/freshman-summary/" title="大一生活总结"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">大一生活总结</div></div><div class="info-2"><div class="info-item-1">大一的话，最开始一两个月还是比较充实的，每天看看python，学学ml，我个人还是比较满意的。然后我对自己也不是很自信，所以在期中和期末考试上花的时间比较多，两个学期都感觉期中刚过完就开始复习期末了。下面分享一些东西吧。 关于老师大一上好像没有几个能选的老师，体育老师选的ly，个人挺喜欢的，期末考得很简单，平时要签到的话也会课前说，但是期末没有满分。 大一下的话，微积分选的是lbs，上课废话比较多，喜欢聊一些时事，讲一下大道理，个人感觉有点吵，不太适合自习。但是人还是不错的，比较幽默，我和他没有交集，平时分给得也还行，如果坐前面，交集多一点应该会加平时分。 其次是英语选的wkf，人比较好，给分我个人感觉也还行，上课经常会抽一桌人轮流回答，经常使用mooc。 接着是历史，mhq上课事少轻松，主动回答有加分，期末作业是课堂笔记和PPT演讲二选一（后者分比较高），风评很好。 专业写作是wg，喜欢在教室前面转，经常会问旁边人一些小问题，坐后面就没啥事，跑路也可以。 通识这边选了zay的生命科学导论，感觉很不错，每次固定签到，上课回答问题有加分，分很高个人感觉。 避雷大学生心理那个，事多，...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/09/12/matcha-tts-demo/" title="试听 Demo：Matcha-TTS 复现与改进"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-12</div><div class="info-item-2">试听 Demo：Matcha-TTS 复现与改进</div></div><div class="info-2"><div class="info-item-1">这是本项目的汇总页：几组模型的试听对比、客观指标，以及关于 checkpoint 质量震荡的一个小专题。所有音频都是本地模型合成的，点 ▶ 播放即可；想用不受主题样式影响的原版页面，可以看独立版 Demo。  模型架构  文本Text → 音素化G2P · english_cleaners2 → TextEncoderRoPE 注意力 + 时长预测器 → MAS 对齐单调对齐搜索 → CFM 解码器U-Net estimator · 10 步 ODE → 声码器BigVGAN / HiFi-GAN → 波形22050 Hz  训练时同时优化时长损失、先验损失和流匹配损失；推理时从噪声出发做 10 步 ODE 积分得到梅尔频谱，再经声码器转成波形。图中高亮的两块是这次改动的位置。  采样率 22050 Hz 梅尔 80 维 · hop 256 数据 LJSpeech 全量 13000 句 训练 140 epoch · batch 64 ODE 步数 10  做了哪些事  ① 基线复现用官方配置在 LJSpeech 全量上训练 140 epoch，从头训和断点续训都跑过，确认损失收敛...</div></div></div></a><a class="pagination-related" href="/2026/09/05/matcha-tts-windows-training-pitfalls/" title="Windows 从零训练 Matcha-TTS 的踩坑全集"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-05</div><div class="info-item-2">Windows 从零训练 Matcha-TTS 的踩坑全集</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：离线预处理缓存方案 ｜ 下一篇：硬件原理入门  这是整个 Matcha-TTS 训练手记的第一篇：在一台 RTX 5060 Laptop（8GB 显存）+ 16GB 内存的 Windows 笔记本上，从克隆代码到第一次成功合成语音，踩过的坑和它们的解法。后来项目迁移到了 WSL2 并用上了 Mamba 骨干（另有专题），但这一篇里的坑大多是平台无关的，值得单独记录。 一、安装与环境1. 装什么、怎么装代码 clone 到本地即可，不需要 pip install git+...；只需要在仓库根目录 pip install -e .，作用是：装依赖 + 编译 Cython 对齐模块 + 注册命令行工具。国内网络建议换清华源，必要时配 --no-build-isolation。 2. 缺 MSVC 编译器，Cython 模块编译失败1error: Microsoft Visual C++ 14.0 or greater is required  matcha.utils.monotonic_align.core 是 Cy...</div></div></div></a><a class="pagination-related" href="/2026/09/06/matcha-tts-vocoder-registry-metrics-and-demo/" title="工程改造三件套：声码器注册表、评价指标体系与静态 Demo 页"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-06</div><div class="info-item-2">工程改造三件套：声码器注册表、评价指标体系与静态 Demo 页</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：PyTorch 参数解剖 ｜ 下一篇：ConvNeXt V2 与 MCD 震荡机制  模型训练之外，”怎么优雅地换声码器””怎么客观评价合成质量””怎么展示结果”这三件事同样值得工程化。这篇记录对 Matcha-TTS 做的三项改造：注册表重构、MCD&#x2F;WER&#x2F;CER 评价体系、以及一个纯静态试听 Demo 页。 一、声码器注册表：加新声码器只加文件问题原版推理框架里，声码器的加载是 if/else 硬编码。每接一个新声码器（HiFi-GAN 的各个版本、BigVGAN……）都要去改 cli.py 的主流程，越改越乱。 方案：装饰器注册表12345678# matcha/vocoders/__init__.py@register_vocoder(&quot;hifigan_T2_v1&quot;)def load_hifigan_t2(ckpt, device):    ...    return vocoder, denoiserdef load_vocoder(name, ckpt, dev...</div></div></div></a><a class="pagination-related" href="/2026/09/13/sway-sampling-for-flow-matching-tts/" title="Sway Sampling 实测：少步数推理的收益与代价"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-13</div><div class="info-item-2">Sway Sampling 实测：少步数推理的收益与代价</div></div><div class="info-2"><div class="info-item-1"> 相关：Matcha-TTS 训练手记系列 ｜ 项目代码：https://github.com/captwd/mamba-matcha-tts  前面几篇都在改模型（换 Mamba、换 ConvNeXt）。这篇换个方向：不动模型、不重新训练，只在推理时改一下 ODE 的时间步怎么分配，能拿到多少收益——以及一个只看指标发现不了的问题。 Sway Sampling 是什么来自 F5-TTS（arXiv 2410.06885）。推理时把均匀的时间轴做一次非线性重参数化： 1t ← t + a · ( cos(π/2 · t) − 1 + t )   端点不变（t&#x3D;0→0，t&#x3D;1→1），所以积分的起点终点不受影响，只改中间的步长分布 a &lt; 0 时步长在噪声端（t≈0）更密；F5 的默认值是 a = −1.0 本质是数值积分的步长分配：步数有限时，离散化误差沿轨迹并不均匀，把步子挪到误差大的地方更划算  接进 Matcha 只要三处   文件 改动    matcha/models/components/flow_matching.py t_span 生成后加...</div></div></div></a><a class="pagination-related" href="/2026/09/11/integrate-bidirectional-mamba2-into-matcha-tts/" title="把双向 Mamba2 换进 Matcha-TTS 的 U-Net：设计、陷阱与验证"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-11</div><div class="info-item-2">把双向 Mamba2 换进 Matcha-TTS 的 U-Net：设计、陷阱与验证</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：迁移 WSL2 与 mamba-ssm 安装 ｜ 下一篇：换骨干的公平评估  接上一篇，环境好了之后，这一篇讲真正的模型改造：把 Matcha-TTS 里 U-Net 的 Self-Attention 块换成双向 Mamba2，尽量做到”只换混合器、不碰框架”，并记录一个几乎所有人在把 Mamba 集成进已有模型时都会踩的初始化陷阱。 一、先看清要换的是哪一块Matcha-TTS 的声学骨干（estimator）是一个 1D U-Net，结构可以简写为： 123每级 down 块 = [ResnetBlock1D, n × 全局混合器块, 下采样]mid 段      = [ResnetBlock1D, n × 全局混合器块] × num_mid_blocks每级 up 块   = [ResnetBlock1D, n × 全局混合器块, 上采样]（含 skip 拼接）  其中：  ResnetBlock1D 负责局部特征 + 时间步条件注入（t → 正弦编码 → MLP → 逐块注入） 全局混合器块 默认是 dif...</div></div></div></a><a class="pagination-related" href="/2026/09/17/emotion-controllable-matcha-tts-with-emotion2vec/" title="给 Matcha-TTS 加情感：emotion2vec 条件注入与 55 万步训练"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-17</div><div class="info-item-2">给 Matcha-TTS 加情感：emotion2vec 条件注入与 55 万步训练</div></div><div class="info-2"><div class="info-item-1"> 相关：Matcha-TTS 训练手记系列 ｜ 项目代码：https://github.com/captwd/mamba-matcha-tts  前几篇都在改”客观质量”：换骨干、换采样、换评估协议，数据一直是单说话人的 LJSpeech。这篇换个方向——可控性：给定一句文本，指定用愤怒、开心还是悲伤的语气读出来。做法是把 emotion2vec（自监督语音情感表征模型）的句级向量接进 Matcha 的 CFM decoder，在 ESD 情感数据集上从 ep126 一路训到 ep2000，累计 55.3 万步。结果：可懂度大幅提升（WER 45.7% → 13.0%），但也确认了当前架构的短板：情感可辨识度仍然偏低。这一问题主要是由于学习率判断失误导致 设计：三件事防止模型”假装看条件”   模块 做法 位置    条件注入 emotion2vec 句级向量 (768d) → 两层 MLP 投影到 64d → 与说话人嵌入一样沿时间复制、通道拼接进 CFM estimator 的输入 matcha_tts.py · decoder.py   辅助分类器 3 层 Conv1d +...</div></div></div></a></div></div><hr class="custom-hr"/><div id="post-comment"><div class="comment-head"><div class="comment-headline"><i class="fas fa-comments fa-fw"></i><span> 评论</span></div></div><div class="comment-wrap"><div><div id="waline-wrap"></div></div></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/me.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/ loading='lazy'></div><div class="author-info-name">captwd</div><div class="author-info-description"></div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">20</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">47</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/captwd"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/captwd" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a><a class="social-icon" href="mailto:3498376281@qq.com" target="_blank" title="Email"><i class="fas fa-envelope" style="color: #4a7dbe;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">欢迎！</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E3%80%81%E9%97%AE%E9%A2%98%EF%BC%9A%E8%AE%AD%E7%BB%83%E5%BE%AA%E7%8E%AF%E9%87%8C%E8%97%8F%E7%9D%80%E4%B8%80%E4%B8%AA%E9%87%8D%E5%A4%8D%E5%8A%B3%E5%8A%A8"><span class="toc-number">1.</span> <span class="toc-text">一、问题：训练循环里藏着一个重复劳动</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%8C%E3%80%81%E6%96%B9%E6%A1%88%EF%BC%9A%E7%A6%BB%E7%BA%BF%E7%AE%97%E4%B8%80%E6%AC%A1%EF%BC%8C%E8%AE%AD%E7%BB%83%E5%8F%AA%E8%AF%BB%E7%BB%93%E6%9E%9C"><span class="toc-number">2.</span> <span class="toc-text">二、方案：离线算一次，训练只读结果</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%BB%84%E4%BB%B6%E4%B8%80%EF%BC%9A%E7%A6%BB%E7%BA%BF%E9%A2%84%E5%A4%84%E7%90%86%E8%84%9A%E6%9C%AC%EF%BC%88%E6%96%B0%E5%A2%9E%EF%BC%89"><span class="toc-number">2.1.</span> <span class="toc-text">组件一：离线预处理脚本（新增）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%BB%84%E4%BB%B6%E4%BA%8C%EF%BC%9A%E6%95%B0%E6%8D%AE%E9%9B%86%E7%B1%BB%E7%9A%84%E7%BC%93%E5%AD%98%E5%91%BD%E4%B8%AD%E9%80%BB%E8%BE%91%EF%BC%88%E6%94%B9%E9%80%A0%EF%BC%89"><span class="toc-number">2.2.</span> <span class="toc-text">组件二：数据集类的缓存命中逻辑（改造）</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%89%E3%80%81%E9%AA%8C%E8%AF%81%EF%BC%9A%E7%BC%93%E5%AD%98%E5%BF%85%E9%A1%BB%E4%B8%8E%E7%8E%B0%E5%9C%BA%E8%AE%A1%E7%AE%97%E9%80%90%E4%BD%8D%E4%B8%80%E8%87%B4"><span class="toc-number">3.</span> <span class="toc-text">三、验证：缓存必须与现场计算逐位一致</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%9B%9B%E3%80%81%E6%94%B6%E7%9B%8A%EF%BC%9A%E6%AF%8F%E8%BD%AE%E7%9C%81%E4%B8%8B%E7%BA%A6-30-%E7%A7%92%EF%BC%8C%E7%A3%81%E7%9B%98%E2%80%9D%E9%80%80%E4%BC%91%E2%80%9D"><span class="toc-number">4.</span> <span class="toc-text">四、收益：每轮省下约 30 秒，磁盘”退休”</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%94%E3%80%81%E8%B8%A9%E8%BF%87%E7%9A%84%E4%B8%A4%E4%B8%AA%E5%9D%91"><span class="toc-number">5.</span> <span class="toc-text">五、踩过的两个坑</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%9D%91-1%EF%BC%9A%E8%BF%90%E8%A1%8C%E9%A2%84%E5%A4%84%E7%90%86%E8%84%9A%E6%9C%AC%E5%89%8D%E5%BF%85%E9%A1%BB%E8%AE%BE%E7%BD%AE-espeak-%E7%8E%AF%E5%A2%83%E5%8F%98%E9%87%8F"><span class="toc-number">5.1.</span> <span class="toc-text">坑 1：运行预处理脚本前必须设置 espeak 环境变量</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%9D%91-2%EF%BC%9A%E7%BC%93%E5%AD%98%E7%9B%AE%E5%BD%95%E6%98%AF%E8%AE%AD%E7%BB%83%E5%BF%85%E9%9C%80%E5%93%81%EF%BC%8C%E5%88%AB%E4%B9%B1%E6%8C%AA"><span class="toc-number">5.2.</span> <span class="toc-text">坑 2：缓存目录是训练必需品，别乱挪</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%B0%8F%E7%BB%93"><span class="toc-number">6.</span> <span class="toc-text">小结</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%85%B3%E9%94%AE%E4%BB%A3%E7%A0%81"><span class="toc-number">7.</span> <span class="toc-text">关键代码</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-%E9%A2%84%E5%A4%84%E7%90%86%E8%84%9A%E6%9C%AC%EF%BC%9A%E5%8D%95%E4%B8%AA%E6%A0%B7%E6%9C%AC%E7%9A%84-mel-%E9%9F%B3%E7%B4%A0"><span class="toc-number">7.1.</span> <span class="toc-text">1. 预处理脚本：单个样本的 mel + 音素</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-%E5%A4%9A%E8%BF%9B%E7%A8%8B%E8%B7%91%E5%AE%8C%EF%BC%8C%E6%8A%8A%E5%8F%82%E6%95%B0%E5%86%99%E8%BF%9B-meta-json"><span class="toc-number">7.2.</span> <span class="toc-text">2. 多进程跑完，把参数写进 meta.json</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-%E8%AE%AD%E7%BB%83%E4%BE%A7%EF%BC%9A%E5%90%AF%E5%8A%A8%E6%97%B6%E6%A0%A1%E9%AA%8C%E5%8F%82%E6%95%B0%EF%BC%8C%E5%AF%B9%E4%B8%8D%E4%B8%8A%E5%B0%B1%E7%A6%81%E7%94%A8%E7%BC%93%E5%AD%98"><span class="toc-number">7.3.</span> <span class="toc-text">3. 训练侧：启动时校验参数，对不上就禁用缓存</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-%E5%8F%96%E6%95%B0%E6%8D%AE%EF%BC%9A%E4%BC%98%E5%85%88%E8%AF%BB%E7%BC%93%E5%AD%98%EF%BC%8C%E6%9C%AA%E5%91%BD%E4%B8%AD%E5%9B%9E%E9%80%80%E5%8E%9F%E9%80%BB%E8%BE%91"><span class="toc-number">7.4.</span> <span class="toc-text">4. 取数据：优先读缓存，未命中回退原逻辑</span></a></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/17/hello-world/" title="Hello World">Hello World</a><time datetime="2026-09-17T15:54:54.794Z" title="发表于 2026-09-17 23:54:54">2026-09-17</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/17/emotion-controllable-matcha-tts-with-emotion2vec/" title="给 Matcha-TTS 加情感：emotion2vec 条件注入与 55 万步训练">给 Matcha-TTS 加情感：emotion2vec 条件注入与 55 万步训练</a><time datetime="2026-09-17T03:00:00.000Z" title="发表于 2026-09-17 11:00:00">2026-09-17</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/17/300m-speech-models-learning-rate-reference/" title="300M 量级语音模型学习率速查：一个窄带里的两个世界">300M 量级语音模型学习率速查：一个窄带里的两个世界</a><time datetime="2026-09-17T02:45:00.000Z" title="发表于 2026-09-17 10:45:00">2026-09-17</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/13/f5-tts-zero-shot-duration-and-decoupled-heads/" title="F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法">F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法</a><time datetime="2026-09-13T14:30:00.000Z" title="发表于 2026-09-13 22:30:00">2026-09-13</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/13/injecting-statistical-potentials-ideas-and-architecture/" title="给蛋白距离预测注入统计势：想法与模型架构">给蛋白距离预测注入统计势：想法与模型架构</a><time datetime="2026-09-13T12:00:00.000Z" title="发表于 2026-09-13 20:00:00">2026-09-13</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By captwd</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.2</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.5</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><a id="to_comment" href="#post-comment" title="前往评论"><i class="fas fa-comments"></i></a><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.5"></script><script src="/js/main.js?v=5.5.5"></script><div class="js-pjax"><script>(() => {
+  let initFn = window.walineFn || null
+  const isShuoshuo = GLOBAL_CONFIG_SITE.pageType === 'shuoshuo'
+  const option = null
+
+  const destroyWaline = ele => ele.destroy()
+
+  const initWaline = (Fn, el = document, path = window.location.pathname) => {
+    const waline = Fn({
+      el: el.querySelector('#waline-wrap'),
+      serverURL: '',
+      pageview: false,
+      dark: 'html[data-theme="dark"]',
+      comment: false,
+      ...option,
+      path: isShuoshuo ? path : (option && option.path) || path
+    })
+
+    if (isShuoshuo) {
+      window.shuoshuoComment.destroyWaline = () => {
+        destroyWaline(waline)
+        if (el.children.length) {
+          el.innerHTML = ''
+          el.classList.add('no-comment')
+        }
+      }
+    }
+  }
+
+  const loadWaline = (el, path) => {
+    if (initFn) initWaline(initFn, el, path)
+    else {
+      btf.getCSS('https://cdn.jsdelivr.net/npm/@waline/client@3.15.2/dist/waline.min.css')
+        .then(() => import('https://cdn.jsdelivr.net/npm/@waline/client@3.15.2/dist/waline.min.js'))
+        .then(({ init }) => {
+          initFn = init || Waline.init
+          initWaline(initFn, el, path)
+          window.walineFn = initFn
+        })
+    }
+  }
+
+  if (isShuoshuo) {
+    'Waline' === 'Waline'
+      ? window.shuoshuoComment = { loadComment: loadWaline } 
+      : window.loadOtherComment = loadWaline
+    return
+  }
+
+  if ('Waline' === 'Waline' || !false) {
+    if (false) btf.loadComment(document.getElementById('waline-wrap'),loadWaline)
+    else setTimeout(loadWaline, 0)
+  } else {
+    window.loadOtherComment = loadWaline
+  }
+})()</script></div><video autoplay loop muted playsinline style="position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:-999;opacity:0.8;pointer-events:none;"><source src="/video/live.mp4" type="video/mp4"></video><script src="/mascot/looklook.js"></script><script src="/mascot/arkpets/lazy-load.js"></script><script src="/js/pagination-scroll.js"></script><script id="click-heart" src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/dist/click-heart.min.js" async="async" mobile="false"></script><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>

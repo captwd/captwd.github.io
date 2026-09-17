@@ -1,0 +1,62 @@
+<svg viewBox="0 0 940 430" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1e7a55"/>
+    </marker>
+  </defs>
+  <!-- 磁盘 -->
+  <rect x="20" y="40" width="200" height="150" rx="10" fill="#fff" stroke="#64748b" stroke-width="2"/>
+  <text x="120" y="66" text-anchor="middle" font-size="14" font-weight="bold" fill="#475569">磁盘（NVMe，2%）</text>
+  <g font-size="11.5" fill="#666">
+    <text x="35" y="92">· 离线缓存 .npy/phonemes.json</text>
+    <text x="35" y="112">  （首轮读一次，之后进页缓存）</text>
+    <text x="35" y="140" fill="#b7791f">· 每 epoch 末：写 258MB ckpt</text>
+    <text x="35" y="158" fill="#b7791f">  + tensorboard 事件追加</text>
+  </g>
+  <!-- 内存 -->
+  <rect x="330" y="40" width="280" height="220" rx="10" fill="#e8f4ee" stroke="#1e7a55" stroke-width="2"/>
+  <text x="470" y="66" text-anchor="middle" font-size="14" font-weight="bold" fill="#14573c">内存（12.9 / 15.2GB）</text>
+  <g font-size="11.5">
+    <rect x="350" y="82" width="240" height="30" rx="6" fill="#fff" stroke="#2563ab"/>
+    <text x="470" y="101" text-anchor="middle">页缓存（数据集副本，磁盘 2% 的原因）</text>
+    <rect x="350" y="120" width="115" height="30" rx="6" fill="#fff" stroke="#1e7a55"/>
+    <text x="407" y="139" text-anchor="middle">worker ×2 各~780MB</text>
+    <rect x="475" y="120" width="115" height="30" rx="6" fill="#fff" stroke="#1e7a55"/>
+    <text x="532" y="139" text-anchor="middle">主进程 python+torch</text>
+    <rect x="350" y="158" width="115" height="30" rx="6" fill="#fff" stroke="#2563ab"/>
+    <text x="407" y="177" text-anchor="middle">pinned 锁页缓冲</text>
+    <rect x="475" y="158" width="115" height="30" rx="6" fill="#fce8e6" stroke="#c0392b"/>
+    <text x="532" y="177" text-anchor="middle">（共享显存溢出区·已消除）</text>
+    <text x="470" y="215" text-anchor="middle" font-size="11" fill="#c0392b">85% = 警戒位：再往里塞任何东西都会挤压页缓存</text>
+    <text x="470" y="233" text-anchor="middle" font-size="11" fill="#c0392b">→ 触发换页 → 反过来拖慢 worker 与 GPU 喂数</text>
+  </g>
+  <!-- CPU -->
+  <rect x="660" y="40" width="260" height="150" rx="10" fill="#fff" stroke="#1e7a55" stroke-width="2"/>
+  <text x="790" y="66" text-anchor="middle" font-size="14" font-weight="bold" fill="#14573c">CPU（33%，16 线程）</text>
+  <g font-size="11.5" fill="#666">
+    <text x="675" y="92">· 主进程（单线程 GIL）：训练循环、</text>
+    <text x="675" y="110">  组装参数、发射 CUDA kernel、日志</text>
+    <text x="675" y="134">· worker ×2：读缓存→collate 补零→</text>
+    <text x="675" y="152">  序列化经共享内存传给主进程</text>
+    <text x="675" y="176" fill="#b7791f">· 每 5 epoch：画图 + DTW-MCD 尖峰</text>
+  </g>
+  <!-- GPU -->
+  <rect x="660" y="240" width="260" height="110" rx="10" fill="#1e7a55"/>
+  <text x="790" y="266" text-anchor="middle" font-size="14" font-weight="bold" fill="#fff">GPU（46%，7.6GB）</text>
+  <g font-size="11.5" fill="#d8ede4">
+    <text x="675" y="290">· 前向/反向/优化器步（真实计算）</text>
+    <text x="675" y="310">· 常驻 ~270MiB（参数+梯度+Adam）</text>
+    <text x="675" y="330">· 其余时间在等主进程喂数据</text>
+  </g>
+  <!-- flows -->
+  <g stroke="#1e7a55" stroke-width="2" fill="none" marker-end="url(#ar2)">
+    <line x1="120" y1="192" x2="120" y2="230" stroke="#64748b"/>
+    <line x1="230" y1="120" x2="327" y2="120" stroke-dasharray="5 4"/>
+    <line x1="612" y1="135" x2="657" y2="100"/>
+    <line x1="790" y1="192" x2="790" y2="237"/>
+  </g>
+  <text x="128" y="222" font-size="11" fill="#475569">缺页时才读盘</text>
+  <text x="278" y="112" font-size="11" fill="#666">worker 启动时</text>
+  <text x="636" y="112" font-size="11" fill="#666">batch</text>
+  <text x="800" y="220" font-size="11" fill="#666">每步 H2D</text>
+</svg>
