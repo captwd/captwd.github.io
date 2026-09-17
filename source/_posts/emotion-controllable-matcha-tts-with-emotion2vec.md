@@ -66,9 +66,9 @@ emotion2vec 的选择也有讲究：它输出的是**连续、细粒度**的情�
 
 | 情感 | 文本 | s=1.0（自然） | s=2.0（加强） |
 |---|---|---|---|
-| 😊 | "We are going to the beach this weekend, I am so excited!" | <audio controls preload="none" src="/emo_audio/happy_s1.wav"></audio> | <audio controls preload="none" src="/emo_audio/happy_s2.wav"></audio> |
-| 😠 | "How many times do I have to tell you not to leave the door open?" | <audio controls preload="none" src="/emo_audio/angry_s1.wav"></audio> | <audio controls preload="none" src="/emo_audio/angry_s2.wav"></audio> |
-| 😢 | "I still remember the day she left, it was raining heavily." | <audio controls preload="none" src="/emo_audio/sad_s1.wav"></audio> | <audio controls preload="none" src="/emo_audio/sad_s2.wav"></audio> |
+| 😊 | "We are going to the beach this weekend, I am so excited!" | <audio controls preload="none" src="/emo_audio/00_happy_s1.mp3"></audio> | <audio controls preload="none" src="/emo_audio/00_happy_s2.mp3"></audio> |
+| 😠 | "How many times do I have to tell you not to leave the door open?" | <audio controls preload="none" src="/emo_audio/00_angry_s1.mp3"></audio> | <audio controls preload="none" src="/emo_audio/00_angry_s2.mp3"></audio> |
+| 😢 | "I still remember the day she left, it was raining heavily." | <audio controls preload="none" src="/emo_audio/00_sad_s1.mp3"></audio> | <audio controls preload="none" src="/emo_audio/00_sad_s2.mp3"></audio> |
 
 （s 是推理期 CFG 外推强度，越大情感越夸张。）
 
