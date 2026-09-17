@@ -445,3 +445,23 @@ div#category .article-sort-item-time,
 div#tag .article-sort-item-time {
   color: rgba(230, 238, 250, 0.9) !important;
 }
+
+/* ========== 标签云页：热门标签更大、整体居中 ========== */
+/* cloudTags 默认只有 1.2/1.35/1.5em 三档，梯度太窄看不出层次 */
+.tag-cloud-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.75em 0.6em;
+}
+.tag-cloud-list a[style*="font-size: 1.5em"] {
+  font-size: 2.5em !important;
+  font-weight: 700;
+}
+.tag-cloud-list a[style*="font-size: 1.35em"] {
+  font-size: 1.75em !important;
+}
+.tag-cloud-list a[style*="font-size: 1.2em"] {
+  font-size: 1.1em !important;
+}
