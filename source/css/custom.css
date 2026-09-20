@@ -465,3 +465,13 @@ div#tag .article-sort-item-time {
 .tag-cloud-list a[style*="font-size: 1.2em"] {
   font-size: 1.1em !important;
 }
+
+/* ========== 动态页：时间线配图限制尺寸，避免竖图占满整屏 ========== */
+/* 需要 ID 提权：主题的 .container img{max-width:100%} 与类选择器同权重且后加载 */
+#article-container .timeline-item-content img {
+  max-width: 400px;
+  max-height: 520px;
+  width: auto;
+  border-radius: 8px;
+  margin: 6px 0;
+}
