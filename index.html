@@ -1,0 +1,233 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="dark"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>captwd的笔记 - Haplous, is the goal</title><meta name="author" content="captwd"><meta name="copyright" content="captwd"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#0d0d0d"><meta property="og:type" content="website">
+<meta property="og:title" content="captwd的笔记">
+<meta property="og:url" content="https://captwd.github.io/index.html">
+<meta property="og:site_name" content="captwd的笔记">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://captwd.github.io/img/me.png">
+<meta property="article:author" content="captwd">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://captwd.github.io/img/me.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "captwd的笔记",
+  "alternateName": [
+    "Haplous, is the goal",
+    "captwd.github.io"
+  ],
+  "url": "https://captwd.github.io/"
+}</script><link rel="shortcut icon" href="/img/me.png"><link rel="canonical" href="https://captwd.github.io/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.5"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'captwd的笔记',
+  isHighlightShrink: false,
+  isToc: false,
+  pageType: 'home'
+}</script><style>#web_bg { background: transparent !important; }</style><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/mascot/looklook.css"><meta name="generator" content="Hexo 8.1.2"><link rel="alternate" href="/atom.xml" title="captwd的笔记" type="application/atom+xml">
+</head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/me.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/ loading='lazy'></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">25</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">56</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 文章</span></a></div><div class="menus_item"><a class="site-page" href="/moments/"><i class="fa-fw fas fa-heart"></i><span> 动态</span></a></div><div class="menus_item"><a class="site-page" href="/photos/"><i class="fa-fw fas fa-images"></i><span> 相册</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comments"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/links/"><i class="fa-fw fas fa-link"></i><span> 链接</span></a></div></div></div></div><div class="page" id="body-wrap"><header class="full_page" id="page-header" style="background-image: url(/img/index-bg.webp);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">captwd的笔记</span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 文章</span></a></div><div class="menus_item"><a class="site-page" href="/moments/"><i class="fa-fw fas fa-heart"></i><span> 动态</span></a></div><div class="menus_item"><a class="site-page" href="/photos/"><i class="fa-fw fas fa-images"></i><span> 相册</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comments"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/links/"><i class="fa-fw fas fa-link"></i><span> 链接</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="site-info"><h1 id="site-title">captwd的笔记</h1><div id="site-subtitle"><span id="subtitle"></span></div><div id="site_social_icons"><a class="social-icon" href="https://github.com/captwd" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a><a class="social-icon" href="mailto:3498376281@qq.com" target="_blank" title="Email"><i class="fas fa-envelope" style="color: #4a7dbe;"></i></a></div></div><div id="scroll-down"><i class="fas fa-angle-down scroll-down-effects"></i></div></header><main class="layout" id="content-inner"><div class="recent-posts nc" id="recent-posts"><div class="recent-post-items"><div class="recent-post-item"><div class="recent-post-info no-cover"><a class="article-title" href="/2026/09/20/hello-world/" title="Hello World">Hello World</a><div class="article-meta-wrap"><span class="post-meta-date"><i class="far fa-calendar-alt"></i><span class="article-meta-label">发表于</span><time datetime="2026-09-20T13:03:38.594Z" title="发表于 2026-09-20 21:03:38">2026-09-20</time></span><span class="article-meta"><span class="article-meta-separator">|</span><i class="fas fa-inbox"></i><a class="article-meta__categories" href="/categories/%E9%9A%8F%E7%AC%94/">随笔</a></span></div><div class="content">Welcome to Hexo! This is your very first post. Check documentation for more info. If you get any problems when using Hexo, you can find the answer in troubleshooting or you can ask me on GitHub. Quick StartCreate a new post1$ hexo new &quot;My New Post&quot;  More info: Writing Run server1$ hexo server  More info: Server Generate static files1$ hexo generate  More info: Generating Deploy to remote sites1$ hexo deploy  More info: Deployment </div></div></div><div class="recent-post-item"><div class="recent-post-info no-cover"><a class="article-title" href="/2026/09/19/metrics-three-layers/" title="读指标的三个层次：测量什么、扔掉什么、噪声多大">读指标的三个层次：测量什么、扔掉什么、噪声多大</a><div class="article-meta-wrap"><span class="post-meta-date"><i class="far fa-calendar-alt"></i><span class="article-meta-label">发表于</span><time datetime="2026-09-19T02:20:00.000Z" title="发表于 2026-09-19 10:20:00">2026-09-19</time></span><span class="article-meta"><span class="article-meta-separator">|</span><i class="fas fa-inbox"></i><a class="article-meta__categories" href="/categories/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E5%AE%9E%E8%B7%B5/">深度学习实践</a></span></div><div class="content"> 「语音模型学习笔记」系列：① 速度场 ｜ ② 条件与 CFG ｜ ③ 自监督表征 ｜ ④ 对齐四范式 ｜ ⑤ 指标的三个层次  生成式语音的评估里，MCD、WER 这些数字被用来做各种决策：哪个 checkpoint 好、要不要 early stop、架构 A 是否优于架构 B。但每个指标都由三层构成——它测量什么、它刻意扔掉了什么、它自身的噪声有多大——三层都想清楚，才谈得上”用指标做决策”。这篇用 MCD 的三个实例把这三层串起来，三个实例都来自实际的训练项目，细节在系列旧文里。 第一层：它测量什么——以及和谁比MCD（mel 倒谱失真）的常见实现就不止一种：log-mel(80) + DCT-II 取 13 个系数是一套，SPTK&#x2F;merlin 工具链的 mcep（带频率弯曲）是另一套。同一对音频，两种提取器算出的绝对值能差一个量级——厘米和英寸，数字不能直接互比。所以”我的 MCD 56 比论文里的 5 差了十倍”是个伪结论。 可比的参照系要自己造：声码器往返校准——拿真实音频的 mel，喂给声码器变成 wav，再从 wav 提回 mel，算这两个 mel 的...</div></div></div><div class="recent-post-item"><div class="recent-post-info no-cover"><a class="article-title" href="/2026/09/19/alignment-ctc-transducer-aed-mas/" title="没有帧级标注，语音模型怎么活：CTC、Transducer、AED 与 MAS">没有帧级标注，语音模型怎么活：CTC、Transducer、AED 与 MAS</a><div class="article-meta-wrap"><span class="post-meta-date"><i class="far fa-calendar-alt"></i><span class="article-meta-label">发表于</span><time datetime="2026-09-19T02:15:00.000Z" title="发表于 2026-09-19 10:15:00">2026-09-19</time></span><span class="article-meta"><span class="article-meta-separator">|</span><i class="fas fa-inbox"></i><a class="article-meta__categories" href="/categories/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E5%AE%9E%E8%B7%B5/">深度学习实践</a></span></div><div class="content"> 「语音模型学习笔记」系列：① 速度场 ｜ ② 条件与 CFG ｜ ③ 自监督表征 ｜ ④ 对齐四范式 ｜ ⑤ 指标的三个层次  音频一段几百上千帧，转写文本几十个字，而”第 37 帧对应哪个字”这种帧级标注永远不存在。识别要”多对少”（把帧压成字），合成要”一对多”（把字铺成帧），中间都隔着一道未知的对齐。这篇把 ASR&#x2F;TTS 领域对这同一个困难的四种回答放进一张图里看。 CTC：把所有合法对齐求和CTC（Connectionist Temporal Classification）的三步：  加一个特殊符号 blank ␣，模型对每一帧输出”字表 + blank”上的分布； 定义折叠规则：合并连续重复 → 删掉 blank； 损失 &#x3D; 所有折叠后等于转写标签的逐帧路径概率之和（前向-后向 DP 高效计算）。  1234567转写 &quot;hi&quot;，8 帧，三条候选逐帧序列：  t:  1  2  3  4  5  6  7  8        折叠后        结果     h  h  ␣ ␣  h  i  i  ␣          h,...</div></div></div><div class="recent-post-item"><div class="recent-post-info no-cover"><a class="article-title" href="/2026/09/19/speech-ssl-three-paradigms/" title="掩码预测的副产品：自监督语音表征为什么&quot;接个头就能用&quot;">掩码预测的副产品：自监督语音表征为什么&quot;接个头就能用&quot;</a><div class="article-meta-wrap"><span class="post-meta-date"><i class="far fa-calendar-alt"></i><span class="article-meta-label">发表于</span><time datetime="2026-09-19T02:10:00.000Z" title="发表于 2026-09-19 10:10:00">2026-09-19</time></span><span class="article-meta"><span class="article-meta-separator">|</span><i class="fas fa-inbox"></i><a class="article-meta__categories" href="/categories/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E5%AE%9E%E8%B7%B5/">深度学习实践</a></span></div><div class="content"> 「语音模型学习笔记」系列：① 速度场 ｜ ② 条件与 CFG ｜ ③ 自监督表征 ｜ ④ 对齐四范式 ｜ ⑤ 指标的三个层次  emotion2vec 这类自监督模型有个乍看矛盾的现象：预训练时的任务只是”预测被掩码的片段”，既没见过任何情感标签，为什么预训练完，接一个两层 MLP 就能做情感识别？这篇的答案分三步：掩码预测到底在逼模型学什么（代理任务的哲学）、三种自监督范式各自的实现、以及”小头读出”为什么会成立。 预测是代理任务，表征才是副产品先纠正一个直觉：模型要学的从来不是”预测被掩码片段”这件事本身，而是”为了让被掩片段变得可预测，中间表征必须编码哪些信息“。 一段被掩掉的 20ms 音频由什么决定？协同发音、说话人音色、语速语调、情绪状态（愤怒的元音和悲伤的元音频谱结构完全不同）、录音环境。模型没法预知哪个因素对预测贡献大，梯度会把所有决定因素都压进特征里——掩码预测本质上是在逼模型学一个”语音声学的世界模型”。预测是代理任务（pretext task），表征是副产品。 情感的特别之处在于它不是表面细节，而是决定语音如何被实现的高层生成因子：同一个”好”字，愤怒版和...</div></div></div><div class="recent-post-item"><div class="recent-post-info no-cover"><a class="article-title" href="/2026/09/19/conditions-and-cfg-in-cfm/" title="CFM 的条件与 CFG：模型怎么&quot;听话&quot;，大 s 为什么会出伪影">CFM 的条件与 CFG：模型怎么&quot;听话&quot;，大 s 为什么会出伪影</a><div class="article-meta-wrap"><span class="post-meta-date"><i class="far fa-calendar-alt"></i><span class="article-meta-label">发表于</span><time datetime="2026-09-19T02:05:00.000Z" title="发表于 2026-09-19 10:05:00">2026-09-19</time></span><span class="article-meta"><span class="article-meta-separator">|</span><i class="fas fa-inbox"></i><a class="article-meta__categories" href="/categories/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E5%AE%9E%E8%B7%B5/">深度学习实践</a></span></div><div class="content"> 「语音模型学习笔记」系列：① 速度场 ｜ ② 条件与 CFG ｜ ③ 自监督表征 ｜ ④ 对齐四范式 ｜ ⑤ 指标的三个层次  上一篇说清了流匹配的训练目标是一个 MSE 回归，但那个回归是有条件的：网络学的从来不是”mel 长什么样”，而是”给定条件之后，mel 长什么样”。这篇讲条件怎么进网络、推理时怎么放大条件的作用（CFG），以及为什么引导强度一大就会合成出伪影。 条件是什么：给定后所剩的不确定性条件 c 可以一句话定义：给定之后，目标分布所剩的不确定性之外的一切已知信息。流 p(x₁|c) 只负责建模 c 决定不了的那部分随机性——条件压缩掉的部分模型不用学，条件决定不了的部分才是流要去”搬运”的东西。 这个定义直接解释了流匹配 TTS 的少步数可行性：条件越充分（帧级文本、说话人、情感），分布被收窄得越厉害，路径越直，ODE 越好积分。反过来说，无条件生成的流要在”任何可能的语音”之间搬运概率质量，路径高度弯曲，十步 Euler 根本积不动。 Matcha 的条件账本以在 ESD 情感数据集上训练的多说话人 Matcha 为例，进入 CFM 的条件一共四个（逐元素门...</div></div></div><div class="recent-post-item"><div class="recent-post-info no-cover"><a class="article-title" href="/2026/09/19/cfm-velocity-field-notes/" title="生成模型为什么可以只是一个 MSE：流匹配的速度场视角">生成模型为什么可以只是一个 MSE：流匹配的速度场视角</a><div class="article-meta-wrap"><span class="post-meta-date"><i class="far fa-calendar-alt"></i><span class="article-meta-label">发表于</span><time datetime="2026-09-19T02:00:00.000Z" title="发表于 2026-09-19 10:00:00">2026-09-19</time></span><span class="article-meta"><span class="article-meta-separator">|</span><i class="fas fa-inbox"></i><a class="article-meta__categories" href="/categories/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E5%AE%9E%E8%B7%B5/">深度学习实践</a></span></div><div class="content"> 「语音模型学习笔记」系列：① 速度场 ｜ ② 条件与 CFG ｜ ③ 自监督表征 ｜ ④ 对齐四范式 ｜ ⑤ 指标的三个层次  Matcha-TTS 和 F5-TTS 这类流匹配 TTS，训练损失只有一个 MSE。第一眼看很难接受：生成一段语音，不应该是很复杂的事吗——对抗训练、噪声调度表、自回归逐字预测，怎么轮到流匹配就只剩下一个均方误差？这篇把这件事拆开。 公式全部采用 Matcha 的 flow_matching.py 和 F5 的 cfm.py 里的实际写法，两个仓库这两段代码几乎逐字相同。 从噪声到 mel：一条直线训练数据里有一段真实 mel 频谱 x₁（80 通道 × T 帧），再采一捧同形状的高斯噪声 x₀。流的任务是把噪声搬运到数据，rectified flow 把这条路定义为两点之间的直线段： 1x_t = (1 − t)·x₀ + t·x₁          # t ∈ [0,1]，逐元素的凸组合  这是”加噪声”的一步——想象一张频谱从雪花点里逐渐析出的过程：t&#x3D;0 整张图是纯噪声，t&#x3D;1 是干净 mel，t&#x3D;0.5 时每一...</div></div></div><div class="recent-post-item"><div class="recent-post-info no-cover"><a class="article-title" href="/2026/09/17/emotion-controllable-matcha-tts-with-emotion2vec/" title="给 Matcha-TTS 加情感：emotion2vec 条件注入与 55 万步训练">给 Matcha-TTS 加情感：emotion2vec 条件注入与 55 万步训练</a><div class="article-meta-wrap"><span class="post-meta-date"><i class="far fa-calendar-alt"></i><span class="article-meta-label">发表于</span><time datetime="2026-09-17T03:00:00.000Z" title="发表于 2026-09-17 11:00:00">2026-09-17</time></span><span class="article-meta"><span class="article-meta-separator">|</span><i class="fas fa-inbox"></i><a class="article-meta__categories" href="/categories/Matcha-TTS/">Matcha-TTS</a></span></div><div class="content"> 相关：Matcha-TTS 训练手记系列 ｜ 项目代码：https://github.com/captwd/mamba-matcha-tts  前几篇都在改”客观质量”：换骨干、换采样、换评估协议，数据一直是单说话人的 LJSpeech。这篇换个方向——可控性：给定一句文本，指定用愤怒、开心还是悲伤的语气读出来。做法是把 emotion2vec（自监督语音情感表征模型）的句级向量接进 Matcha 的 CFM decoder，在 ESD 情感数据集上从 ep126 一路训到 ep2000，累计 55.3 万步。结果：可懂度大幅提升（WER 45.7% → 13.0%），但也确认了当前架构的短板：情感可辨识度仍然偏低。这一问题主要是由于学习率判断失误导致 设计：三件事防止模型”假装看条件”   模块 做法 位置    条件注入 emotion2vec 句级向量 (768d) → 两层 MLP 投影到 64d → 与说话人嵌入一样沿时间复制、通道拼接进 CFM estimator 的输入 matcha_tts.py · decoder.py   辅助分类器 3 层 Conv1d +...</div></div></div><div class="recent-post-item"><div class="recent-post-info no-cover"><a class="article-title" href="/2026/09/17/300m-speech-models-learning-rate-reference/" title="300M 量级语音模型学习率速查：一个窄带里的两个世界">300M 量级语音模型学习率速查：一个窄带里的两个世界</a><div class="article-meta-wrap"><span class="post-meta-date"><i class="far fa-calendar-alt"></i><span class="article-meta-label">发表于</span><time datetime="2026-09-17T02:45:00.000Z" title="发表于 2026-09-17 10:45:00">2026-09-17</time></span><span class="article-meta"><span class="article-meta-separator">|</span><i class="fas fa-inbox"></i><a class="article-meta__categories" href="/categories/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E5%AE%9E%E8%B7%B5/">深度学习实践</a></span></div><div class="content"> 起因：微调 F5-TTS 时对学习率没手感，翻了一圈文献和官方配置，把”300M 附近”的流行语音模型学习率整理成一张速查表。warmup 的理论解释写了一节，其余（batch 换算、语音敏感性分析）后面补。  速查表   模型 参数量 范式 优化器 峰值 LR 调度 &#x2F; warmup    F5-TTS Base 336M NAR 流匹配 TTS AdamW 7.5e-5（官方配置） 2 万步 warmup，grad clip 1.0   VoiceBox (Meta) ~330M NAR 流匹配 infilling Adam 1e-4 500K updates，EMA 权重推理   MegaTTS 3 (字节) 0.45B 潜空间扩散 DiT Adam 1e-4 1 万步 warmup，β&#x3D;0.9&#x2F;0.999   Whisper Small 244M 弱监督 ASR AdamW 1.75e-4 ~2k 步 warmup + 线性衰减到 0   StyleTTS 2 — 扩散 + GAN AdamW 1e-4 两阶段训练，batch 16 句  ...</div></div></div><div class="recent-post-item"><div class="recent-post-info no-cover"><a class="article-title" href="/2026/09/13/f5-tts-zero-shot-duration-and-decoupled-heads/" title="F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法">F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法</a><div class="article-meta-wrap"><span class="post-meta-date"><i class="far fa-calendar-alt"></i><span class="article-meta-label">发表于</span><time datetime="2026-09-13T14:30:00.000Z" title="发表于 2026-09-13 22:30:00">2026-09-13</time></span><span class="article-meta"><span class="article-meta-separator">|</span><i class="fas fa-inbox"></i><a class="article-meta__categories" href="/categories/F5-TTS/">F5-TTS</a></span></div><div class="content"> 相关：Sway Sampling 实测 ｜ 代码：F5-TTS ｜ 论文：arXiv 2410.06885  今天第一次把 F5-TTS 真正跑起来，本来只是想克隆一个音色，结果被”语速太快”这件事绊住，然后顺着它一路想到模型结构。这篇把整条链记下来，重点放在最后那个解耦预测头的想法。 一、F5-TTS 是什么（一句话版）F5-TTS 是条件流匹配（CFM）+ DiT 的非自回归 TTS：  训练：取真实 mel x1 和高斯噪声 x0，随机时刻 t 构造 x_t=(1−t)x0+t·x1，让网络预测直线速度 v=x1−x0，只对被 mask 的”待生成区”算 MSE。 推理：从噪声出发，用 ODE 沿学到的速度场积分到 t=1，得到 mel。 条件：把参考 mel 和文本一起拼进序列，参考区被”钉住”不动（in-context infilling）——这就是零样本声音克隆的来源。 它刻意做得很简：没有 duration model、没有 text encoder、没有 phoneme alignment，也没有说话人编码器。  这几条代码里都能对上：cfm.py 的 forw...</div></div></div><div class="recent-post-item"><div class="recent-post-info no-cover"><a class="article-title" href="/2026/09/13/injecting-statistical-potentials-ideas-and-architecture/" title="给蛋白距离预测注入统计势：想法与模型架构">给蛋白距离预测注入统计势：想法与模型架构</a><div class="article-meta-wrap"><span class="post-meta-date"><i class="far fa-calendar-alt"></i><span class="article-meta-label">发表于</span><time datetime="2026-09-13T12:00:00.000Z" title="发表于 2026-09-13 20:00:00">2026-09-13</time></span><span class="article-meta"><span class="article-meta-separator">|</span><i class="fas fa-inbox"></i><a class="article-meta__categories" href="/categories/Protein/">Protein</a></span></div><div class="content">深度学习做蛋白质结构预测已经很强了，于是就有个老问题：还需要显式地注入物理先验吗？ 比如从 PDB 里统计出来的统计势（statistical potential of mean force, PMF）。这篇不谈结果，只记一下我在这件事上的想法和模型架构。 一、想法：把”注入有用”拆成三笔账直接从 baseline 跳到”注入真实 PMF”，其实同时改动了三样东西：  架构：多了一个注意力模块，容量变大了； 机制：多了一条偏置信号进入注意力——不管它的数值是什么，都存在一个结构归纳偏置； 内容：这条偏置携带了物理知识（氨基酸对 × 距离的能量偏好）。  这三者在任何”加 vs 不加”的对比里都是混在一起的，所以单看总分根本不知道收益来自哪里。我的想法是设计四个每次只变一个的条件，把账拆开：    条件 变化 逐差得到    Baseline 无轴向注意力、无注入 测量原点   Axial, zero bias 加轴向注意力，偏置固定为 0 架构（模块容量）   Shuffled PMF PMF 的氨基酸标签随机置换 机制（有偏置路径、无内容）   True PMF 完整统计势 内...</div></div></div></div><nav id="pagination"><div class="pagination"><span class="page-number current">1</span><a class="page-number" href="/page/2/#content-inner">2</a><a class="page-number" href="/page/3/#content-inner">3</a><a class="extend next" rel="next" href="/page/2/#content-inner"><i class="fas fa-chevron-right fa-fw"></i></a></div></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/me.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/ loading='lazy'></div><div class="author-info-name">captwd</div><div class="author-info-description"></div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">25</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">56</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/captwd"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/captwd" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a><a class="social-icon" href="mailto:3498376281@qq.com" target="_blank" title="Email"><i class="fas fa-envelope" style="color: #4a7dbe;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">欢迎！</div></div><div class="sticky_layout"><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/20/hello-world/" title="Hello World">Hello World</a><time datetime="2026-09-20T13:03:38.594Z" title="发表于 2026-09-20 21:03:38">2026-09-20</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/19/metrics-three-layers/" title="读指标的三个层次：测量什么、扔掉什么、噪声多大">读指标的三个层次：测量什么、扔掉什么、噪声多大</a><time datetime="2026-09-19T02:20:00.000Z" title="发表于 2026-09-19 10:20:00">2026-09-19</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/19/alignment-ctc-transducer-aed-mas/" title="没有帧级标注，语音模型怎么活：CTC、Transducer、AED 与 MAS">没有帧级标注，语音模型怎么活：CTC、Transducer、AED 与 MAS</a><time datetime="2026-09-19T02:15:00.000Z" title="发表于 2026-09-19 10:15:00">2026-09-19</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/19/speech-ssl-three-paradigms/" title="掩码预测的副产品：自监督语音表征为什么&quot;接个头就能用&quot;">掩码预测的副产品：自监督语音表征为什么&quot;接个头就能用&quot;</a><time datetime="2026-09-19T02:10:00.000Z" title="发表于 2026-09-19 10:10:00">2026-09-19</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/19/conditions-and-cfg-in-cfm/" title="CFM 的条件与 CFG：模型怎么&quot;听话&quot;，大 s 为什么会出伪影">CFM 的条件与 CFG：模型怎么&quot;听话&quot;，大 s 为什么会出伪影</a><time datetime="2026-09-19T02:05:00.000Z" title="发表于 2026-09-19 10:05:00">2026-09-19</time></div></div></div></div><div class="card-widget card-categories"><div class="item-headline">
+            <i class="fas fa-folder-open"></i>
+            <span>分类</span>
+            
+          </div>
+          <ul class="card-category-list" id="aside-cat-list">
+            <li class="card-category-list-item "><a class="card-category-list-link" href="/categories/DDPM/"><span class="card-category-list-name">DDPM</span><span class="card-category-list-count">1</span></a></li><li class="card-category-list-item "><a class="card-category-list-link" href="/categories/F5-TTS/"><span class="card-category-list-name">F5-TTS</span><span class="card-category-list-count">1</span></a></li><li class="card-category-list-item "><a class="card-category-list-link" href="/categories/Matcha-TTS/"><span class="card-category-list-name">Matcha-TTS</span><span class="card-category-list-count">13</span></a></li><li class="card-category-list-item "><a class="card-category-list-link" href="/categories/Protein/"><span class="card-category-list-name">Protein</span><span class="card-category-list-count">1</span></a></li><li class="card-category-list-item "><a class="card-category-list-link" href="/categories/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0%E5%AE%9E%E8%B7%B5/"><span class="card-category-list-name">深度学习实践</span><span class="card-category-list-count">6</span></a></li><li class="card-category-list-item "><a class="card-category-list-link" href="/categories/%E9%9A%8F%E7%AC%94/"><span class="card-category-list-name">随笔</span><span class="card-category-list-count">3</span></a></li>
+          </ul></div><div class="card-widget card-tags"><div class="item-headline"><i class="fas fa-tags"></i><span>标签</span></div><div class="card-tag-cloud"><a href="/tags/TTS/" style="font-size: 1.5em; color: #99a9bf">TTS</a> <a href="/tags/%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/" style="font-size: 1.4em; color: #99a5b6">学习笔记</a> <a href="/tags/%E5%AE%9E%E9%AA%8C%E6%96%B9%E6%B3%95/" style="font-size: 1.3em; color: #99a1ac">实验方法</a> <a href="/tags/Matcha-TTS/" style="font-size: 1.3em; color: #99a1ac">Matcha-TTS</a> <a href="/tags/%E6%B5%81%E5%8C%B9%E9%85%8D/" style="font-size: 1.2em; color: #999da3">流匹配</a> <a href="/tags/%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96/" style="font-size: 1.2em; color: #999da3">性能优化</a> <a href="/tags/MCD/" style="font-size: 1.2em; color: #999da3">MCD</a> <a href="/tags/%E8%AF%AD%E9%9F%B3/" style="font-size: 1.1em; color: #999">语音</a> <a href="/tags/emotion2vec/" style="font-size: 1.1em; color: #999">emotion2vec</a> <a href="/tags/%E7%A1%AC%E4%BB%B6/" style="font-size: 1.1em; color: #999">硬件</a></div></div><div class="card-widget card-archives">
+    <div class="item-headline">
+      <i class="fas fa-archive"></i>
+      <span>归档</span>
+      
+    </div>
+  
+    <ul class="card-archive-list">
+      
+        <li class="card-archive-list-item">
+          <a class="card-archive-list-link" href="/archives/2026/09/">
+            <span class="card-archive-list-date">
+              九月 2026
+            </span>
+            <span class="card-archive-list-count">23</span>
+          </a>
+        </li>
+      
+        <li class="card-archive-list-item">
+          <a class="card-archive-list-link" href="/archives/2026/07/">
+            <span class="card-archive-list-date">
+              七月 2026
+            </span>
+            <span class="card-archive-list-count">2</span>
+          </a>
+        </li>
+      
+    </ul>
+  </div><div class="card-widget card-webinfo"><div class="item-headline"><i class="fas fa-chart-line"></i><span>网站信息</span></div><div class="webinfo"><div class="webinfo-item"><div class="item-name">文章数目 :</div><div class="item-count">25</div></div><div class="webinfo-item"><div class="item-name">本站访客数 :</div><div class="item-count" id="busuanzi_value_site_uv"><i class="fa-solid fa-spinner fa-spin"></i></div></div><div class="webinfo-item"><div class="item-name">本站总浏览量 :</div><div class="item-count" id="busuanzi_value_site_pv"><i class="fa-solid fa-spinner fa-spin"></i></div></div><div class="webinfo-item"><div class="item-name">最后更新时间 :</div><div class="item-count" id="last-push-date" data-lastPushDate="2026-09-20T13:03:52.754Z"><i class="fa-solid fa-spinner fa-spin"></i></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By captwd</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.2</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.5</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.5"></script><script src="/js/main.js?v=5.5.5"></script><div class="js-pjax"><script>window.typedJSFn = {
+  init: str => {
+    window.typed = new Typed('#subtitle', Object.assign({
+      strings: str,
+      startDelay: 300,
+      typeSpeed: 150,
+      loop: true,
+      backSpeed: 50,
+    }, null))
+  },
+  run: subtitleType => {
+    if (true) {
+      if (typeof Typed === 'function') {
+        subtitleType()
+      } else {
+        btf.getScript('https://cdn.jsdelivr.net/npm/typed.js@3.0.0/dist/typed.umd.min.js').then(subtitleType)
+      }
+    } else {
+      subtitleType()
+    }
+  },
+  processSubtitle: (content, extraContents = []) => {
+    if (true) {
+      const sub = ["Haplous, is the goal"].slice()
+
+      if (extraContents.length > 0) {
+        sub.unshift(...extraContents)
+      }
+
+      if (typeof content === 'string') {
+        sub.unshift(content)
+      } else if (Array.isArray(content)) {
+        sub.unshift(...content)
+      }
+
+      sub.length > 0 && typedJSFn.init(sub)
+    } else {
+      document.getElementById('subtitle').textContent = typeof content === 'string' ? content :
+        (Array.isArray(content) && content.length > 0 ? content[0] : '')
+    }
+  }
+}
+btf.addGlobalFn('pjaxSendOnce', () => { typed.destroy() }, 'typedDestroy')
+</script><script>function subtitleType () {
+  typedJSFn.processSubtitle(["Haplous, is the goal"])
+}
+typedJSFn.run(subtitleType)</script></div><video autoplay loop muted playsinline style="position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:-999;opacity:0.8;pointer-events:none;"><source src="/video/live.mp4" type="video/mp4"></video><script src="/mascot/looklook.js"></script><script src="/mascot/arkpets/lazy-load.js"></script><script src="/js/pagination-scroll.js"></script><script id="click-heart" src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/dist/click-heart.min.js" async="async" mobile="false"></script><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>

@@ -1,0 +1,364 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="dark"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>PyTorch 参数解剖：从 Tensor 内存布局到 258MB checkpoint 的精确账本 | captwd的笔记</title><meta name="author" content="captwd"><meta name="copyright" content="captwd"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#0d0d0d"><meta name="description" content="从 Tensor 的内存布局到 258MB checkpoint 的精确账本，解释显存构成与权重迁移限制。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="PyTorch 参数解剖：从 Tensor 内存布局到 258MB checkpoint 的精确账本">
+<meta property="og:url" content="https://captwd.github.io/2026/09/06/pytorch-tensor-parameters-and-checkpoint-anatomy/index.html">
+<meta property="og:site_name" content="captwd的笔记">
+<meta property="og:description" content="从 Tensor 的内存布局到 258MB checkpoint 的精确账本，解释显存构成与权重迁移限制。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://captwd.github.io/img/me.png">
+<meta property="article:published_time" content="2026-09-06T04:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-20T13:03:38.594Z">
+<meta property="article:author" content="captwd">
+<meta property="article:tag" content="PyTorch">
+<meta property="article:tag" content="显存">
+<meta property="article:tag" content="科普">
+<meta property="article:tag" content="训练调优">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://captwd.github.io/img/me.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "PyTorch 参数解剖：从 Tensor 内存布局到 258MB checkpoint 的精确账本",
+  "url": "https://captwd.github.io/2026/09/06/pytorch-tensor-parameters-and-checkpoint-anatomy/",
+  "image": "https://captwd.github.io/img/me.png",
+  "datePublished": "2026-09-06T04:00:00.000Z",
+  "dateModified": "2026-09-20T13:03:38.594Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "captwd",
+      "url": "https://captwd.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/me.png"><link rel="canonical" href="https://captwd.github.io/2026/09/06/pytorch-tensor-parameters-and-checkpoint-anatomy/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.5"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'PyTorch 参数解剖：从 Tensor 内存布局到 258MB checkpoint 的精确账本',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><style>#web_bg { background: transparent !important; }</style><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/mascot/looklook.css"><meta name="generator" content="Hexo 8.1.2"><link rel="alternate" href="/atom.xml" title="captwd的笔记" type="application/atom+xml">
+</head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/me.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/ loading='lazy'></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">25</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">56</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 文章</span></a></div><div class="menus_item"><a class="site-page" href="/moments/"><i class="fa-fw fas fa-heart"></i><span> 动态</span></a></div><div class="menus_item"><a class="site-page" href="/photos/"><i class="fa-fw fas fa-images"></i><span> 相册</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comments"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/links/"><i class="fa-fw fas fa-link"></i><span> 链接</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/index-bg.webp);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">captwd的笔记</span></a><a class="nav-page-title" href="/"><span class="site-name">PyTorch 参数解剖：从 Tensor 内存布局到 258MB checkpoint 的精确账本</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 文章</span></a></div><div class="menus_item"><a class="site-page" href="/moments/"><i class="fa-fw fas fa-heart"></i><span> 动态</span></a></div><div class="menus_item"><a class="site-page" href="/photos/"><i class="fa-fw fas fa-images"></i><span> 相册</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/message/"><i class="fa-fw fas fa-comments"></i><span> 留言板</span></a></div><div class="menus_item"><a class="site-page" href="/links/"><i class="fa-fw fas fa-link"></i><span> 链接</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">PyTorch 参数解剖：从 Tensor 内存布局到 258MB checkpoint 的精确账本</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-09-06T04:00:00.000Z" title="发表于 2026-09-06 12:00:00">2026-09-06</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-09-20T13:03:38.594Z" title="更新于 2026-09-20 21:03:38">2026-09-20</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/Matcha-TTS/">Matcha-TTS</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><blockquote>
+<p><strong>系列 · Matcha-TTS 训练手记</strong> ｜ <a href="/series/">目录</a> ｜ 上一篇：<a href="/2026/09/06/what-cpu-gpu-memory-do-during-training/">训练时硬件实况解读</a> ｜ 下一篇：<a href="/2026/09/06/matcha-tts-vocoder-registry-metrics-and-demo/">声码器注册表与评估体系</a></p>
+</blockquote>
+<p>训练时显存里到底住了什么？checkpoint 为什么恰好是某个大小？换骨干为什么不能热迁移权重？这篇用本项目的真实数字（MatchaTTS + ConvNeXt V2 变体，全模型 22.5M 参数 &#x3D; encoder 7.2M + decoder 15.3M）把这些问题一次讲清。所有数字来自 <code>torchinfo</code> 参数表和 checkpoint 逐键字节统计。</p>
+<h2 id="1-最底层：一个-Tensor-是什么"><a href="#1-最底层：一个-Tensor-是什么" class="headerlink" title="1. 最底层：一个 Tensor 是什么"></a>1. 最底层：一个 Tensor 是什么</h2><p>每个张量由两部分组成：</p>
+<ul>
+<li><strong>元数据</strong>（轻量，几百字节）：shape、stride、dtype、device、<code>requires_grad</code></li>
+<li><strong>Storage</strong>（真正连续的字节缓冲，可被多个张量共享）</li>
+</ul>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">x : Tensor (元数据 ~几百 B, shape=[256,172], f32, cuda:0)</span><br><span class="line">  storage ──→ 一整块连续内存: 256 × 172 × 4B ≈ 176 KB</span><br></pre></td></tr></table></figure>
+
+<p><code>x.view()</code>、<code>x[:, 10]</code> 这类操作<strong>不复制数据</strong>，只新建一个指向同一 Storage 的视图（零拷贝）——这就是 forward 里”按引用传递”的物理基础。而 <code>.to(device)</code> &#x2F; <code>.clone()</code> 会新建 Storage。</p>
+<p><code>nn.Parameter</code> 只是”<code>requires_grad=True</code> 的 Tensor”再挂进模块登记簿，除此之外与普通张量无异。</p>
+<figure>
+  <img src="/img/param-tensor-storage.svg" alt="张量 = 元数据 + Storage" loading='lazy'>
+  <figcaption>张量 = 元数据 + Storage：视图共享 Storage（零拷贝），.to(device)/clone() 才产生新缓冲</figcaption>
+</figure>
+
+<h2 id="2-模块树：参数如何被”登记”和”编址”"><a href="#2-模块树：参数如何被”登记”和”编址”" class="headerlink" title="2. 模块树：参数如何被”登记”和”编址”"></a>2. 模块树：参数如何被”登记”和”编址”</h2><p>每个 <code>nn.Module</code> 内部有三个字典：<code>_parameters</code>（可训练）、<code>_buffers</code>（不训练但要存档，如 mel 均值&#x2F;方差）、<code>_modules</code>（子模块）。构造函数里 <code>self.xxx = nn.Parameter/Module</code> 就是注册动作。</p>
+<p>整个模型是一棵树；<code>state_dict()</code> 就是<strong>深度优先摊平</strong>这棵树，路径名 &#x3D; 属性名用点号连接 &#x3D; 加载时的”门牌号”：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">MatchaTTS</span><br><span class="line">├── encoder (TextEncoder)</span><br><span class="line">├── decoder (CFM)</span><br><span class="line">│   └── estimator (Decoder)</span><br><span class="line">│       └── down_blocks.0.0 (ConvNeXt 块)</span><br><span class="line">│           ├── block1.dwconv.weight        [256,1,7]</span><br><span class="line">│           ├── block1.norm.weight          [256]</span><br><span class="line">│           └── grn.gamma / grn.beta        [1,1,1024]</span><br><span class="line">└── mel_mean / mel_std  (buffer，标量，不训练)</span><br></pre></td></tr></table></figure>
+
+<p>两个关键认知：</p>
+<ol>
+<li><strong>名字即地址，数值即家具</strong>：加载 &#x3D; 按门牌号 <code>copy_()</code> 逐个搬入。换骨干 → 门牌号对不上 → <code>missing/unexpected keys</code></li>
+<li><strong>图纸与家具分两条通道</strong>：架构超参（如 <code>resnet_type</code>）<strong>不在</strong> <code>state_dict</code> 里，而在 checkpoint 的 <code>hyper_parameters</code> 中</li>
+</ol>
+<blockquote>
+<p>去重规则：两个模块共享同一个 Parameter（权重共享）时，<code>state_dict</code> 按对象 id 去重只留一个条目。</p>
+</blockquote>
+<figure>
+  <img src="/img/param-module-tree.svg" alt="模块树到 state_dict" loading='lazy'>
+  <figcaption>模块树 → state_dict 摊平：名字即地址，数值即家具；结构超参走 hparams 独立通道</figcaption>
+</figure>
+
+<h2 id="3-Autograd：激活从哪来，梯度到哪去"><a href="#3-Autograd：激活从哪来，梯度到哪去" class="headerlink" title="3. Autograd：激活从哪来，梯度到哪去"></a>3. Autograd：激活从哪来，梯度到哪去</h2><p>前向时，每一步可微运算都会在<strong>动态计算图</strong>上登记一个节点，并把反向需要的中间结果（<strong>激活</strong>）挂在节点上——这就是显存里”激活”的来源，由计算图持有，<code>backward()</code> 走完即释放。</p>
+<p>梯度沿图反向流，最后由 <code>AccumulateGrad</code> 节点写进叶子参数的 <code>.grad</code>。注意这里是<strong>累加</strong>（<code>+=</code>）而不是覆盖——梯度累积能成立就是因为这个。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">z(噪声), mu_y(条件), t ──→ estimator 前向图（每个算子=节点，节点间挂激活）</span><br><span class="line">                             ↓</span><br><span class="line">                     v_pred (B,80,T) ──→ MSE ──→ loss (标量)</span><br><span class="line">                             ↓ backward()</span><br><span class="line">                     各 Parameter 的 .grad += ...  → 图与激活释放</span><br></pre></td></tr></table></figure>
+
+<figure>
+  <img src="/img/param-autograd.svg" alt="计算图与梯度" loading='lazy'>
+  <figcaption>前向建图挂激活（蓝），反向沿图写 .grad（红）；激活随图释放，.grad 常驻</figcaption>
+</figure>
+
+<p><strong>为什么梯度累积数学等价</strong>：<code>.grad += 微批梯度</code> 天然求和；两个均批梯度之和 &#x3D; 大批平均梯度 ×2，缩放常数被学习率吸收。且本项目用 GroupNorm&#x2F;LayerNorm（无跨样本统计），batch 切分零副作用。</p>
+<h2 id="4-一个优化器步的完整数据流"><a href="#4-一个优化器步的完整数据流" class="headerlink" title="4. 一个优化器步的完整数据流"></a>4. 一个优化器步的完整数据流</h2><p>当前配置：<code>batch 32 × 累积 2</code>、<code>precision: 16-mixed</code>、<code>gradient_clip_val: 5.0</code>。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">微批次 ① (32 样本)</span><br><span class="line">  H2D 拷贝(pinned) → ★前向 autocast fp16 → ★反向(×scale)</span><br><span class="line">  loss.backward()：.grad += 缩放后梯度（不清零、不 step）</span><br><span class="line">  激活随图释放 → 只有 .grad 攒着（很小）</span><br><span class="line"></span><br><span class="line">微批次 ② (同上再来一遍)</span><br><span class="line">  .grad 现在持有&quot;两个 32 样本微批之和&quot; ≈ batch64 的梯度</span><br><span class="line">  至此累计 64 样本信息，尚未更新任何参数</span><br><span class="line"></span><br><span class="line">累积边界（第 2 个微批之后）——只有这里动参数</span><br><span class="line">  scaler.unscale_(grads) → clip_grad_norm_(5.0) → optimizer.step() → zero_grad()</span><br><span class="line">  Adam 用 .grad 更新 m/v 与参数（读写常驻 ~360MB 参数区）</span><br></pre></td></tr></table></figure>
+
+<p>带 ★ 的动作在显存上，其余在 CPU&#x2F;RAM。<strong>参数&#x2F;梯度&#x2F;Adam 状态始终常驻显存</strong>，来回搬运的只有每个微批次的数据与激活。</p>
+<figure>
+  <img src="/img/param-optimizer-step.svg" alt="一个优化器步" loading='lazy'>
+  <figcaption>一个优化器步：微批次 ×2 攒梯度，只在累积边界动一次参数</figcaption>
+</figure>
+
+<h2 id="5-显存地图：7-6GB-里都住了什么"><a href="#5-显存地图：7-6GB-里都住了什么" class="headerlink" title="5. 显存地图：7.6GB 里都住了什么"></a>5. 显存地图：7.6GB 里都住了什么</h2><figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">CUDA 上下文        ~0.4GB</span><br><span class="line">参数 fp32 主本     ~90MB   (22.5M 全量)</span><br><span class="line">梯度 .grad         ~90MB   (同形)</span><br><span class="line">Adam m+v          ~180MB   (精确 2×)</span><br><span class="line">激活              弹性，随 batch/序列长度 ← 大头</span><br><span class="line">分配器缓存        已释放待复用</span><br><span class="line">────────────────────────────</span><br><span class="line">若越界 → 共享 GPU 内存(系统 RAM)，走 PCIe</span><br><span class="line">        (16~32GB/s vs 显存 300+GB/s) → 利用率锯齿、it/s 掉数倍</span><br></pre></td></tr></table></figure>
+
+<p>batch 64 → 32 主要就动了”激活”这一项；常驻部分（蓝绿系）约 0.5GB 是固定的。</p>
+<figure>
+  <img src="/img/param-vram-map.svg" alt="显存地图" loading='lazy'>
+  <figcaption>显存地图：常驻（参数/梯度/Adam ~0.5GB）+ 弹性激活 + 分配器缓存；越界则落到共享显存</figcaption>
+</figure>
+
+<h2 id="6-checkpoint-258MB-的精确账本"><a href="#6-checkpoint-258MB-的精确账本" class="headerlink" title="6. checkpoint 258MB 的精确账本"></a>6. checkpoint 258MB 的精确账本</h2><p>对某个 <code>last.ckpt</code> 逐顶层键统计字节：</p>
+<table>
+<thead>
+<tr>
+<th>成分</th>
+<th>实测</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>state_dict</code>（模型 fp32）</td>
+<td>85.9 MiB</td>
+<td>22.5M 参数 × 4B &#x3D; 90.1 MB；含 buffers</td>
+</tr>
+<tr>
+<td><code>optimizer_states</code>（Adam）</td>
+<td><strong>171.8 MiB</strong></td>
+<td>每参数两条同形状态 m + v，fp32，<strong>恰好是权重的 2 倍</strong></td>
+</tr>
+<tr>
+<td><code>hyper_parameters</code></td>
+<td>≈0</td>
+<td>“图纸”（含 <code>resnet_type</code>、<code>act_fn</code>），pickle 序列化</td>
+</tr>
+<tr>
+<td><code>epoch / global_step / lr_schedulers / loops</code></td>
+<td>≈0</td>
+<td>断点续训的全部进度状态</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td><strong>257.7 MiB ≈ 文件 258.2MB</strong></td>
+<td>逐项对上，无未解释残余</td>
+</tr>
+</tbody></table>
+<p><strong>MiB vs MB 陷阱</strong>：资源管理器显示的”MB”其实是 MiB（1 MiB &#x3D; 1,048,576 B）。22.5M × 4B &#x3D; 90.1 MB（十进制）&#x3D; 85.9 MiB——两种进制都”对”，别用错进制对账。</p>
+<h2 id="7-常见疑问映射回这套模型"><a href="#7-常见疑问映射回这套模型" class="headerlink" title="7. 常见疑问映射回这套模型"></a>7. 常见疑问映射回这套模型</h2><table>
+<thead>
+<tr>
+<th>疑问</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>换 ConvNeXt 后为什么不能热迁移权重？</td>
+<td>门牌号变了（<code>block1.block.0.weight</code> → <code>block1.dwconv.weight</code>）且形状不同；state_dict 严格按名匹配</td>
+</tr>
+<tr>
+<td>为什么改结构要重训，换声码器不用？</td>
+<td>声码器不进 state_dict 匹配范围（独立模型）；声学模型结构变了 &#x3D; 门牌变了 &#x3D; 必须重训</td>
+</tr>
+<tr>
+<td><code>.to(device)</code> 后对象还是原来那个吗？</td>
+<td>是。Parameter 对象身份不变，只换内部 Storage 指针，Python 侧引用继续有效</td>
+</tr>
+<tr>
+<td>梯度累积为什么省显存？</td>
+<td>激活随图即时释放，<code>.grad</code> 与参数同形（小）。”攒激活”贵，”攒梯度”便宜</td>
+</tr>
+<tr>
+<td>16-mixed 省的是什么？</td>
+<td>参数主本仍 fp32（常驻不变）；省的是<strong>激活&#x2F;中间值</strong>（fp16）与 Tensor Core 计算。这也是它降显存到不了 50% 的原因</td>
+</tr>
+<tr>
+<td>为什么 <code>weights_only=False</code>？</td>
+<td>ckpt 里 pickle 了 OmegaConf 对象，torch 2.6+ 默认安全模式拒绝</td>
+</tr>
+<tr>
+<td>推理时为什么显存小得多？</td>
+<td>无反向 → 无激活缓存、无 .grad、无 Adam 状态；常驻只剩参数 ~90MB</td>
+</tr>
+<tr>
+<td>U-Net 和 ConvNeXt 版差多少参数？</td>
+<td>U-Net：encoder 7.2M + decoder 11.0M &#x3D; 18.2M；ConvNeXt：decoder 15.3M，全模型 22.5M</td>
+</tr>
+</tbody></table>
+<h2 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h2><ul>
+<li>显存大头是激活，参数、梯度、优化器状态属于常驻的小头（1M 参数大约 16MB 训练常驻）</li>
+<li>checkpoint 里三分之二是优化器状态（Adam 正好是权重的 2 倍），所以它比模型大得多很正常</li>
+<li>state_dict 的名字就是地址，”换结构要重训、换声码器不用”这类问题，看名字对不对得上就能解释</li>
+</ul>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://captwd.github.io">captwd</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://captwd.github.io/2026/09/06/pytorch-tensor-parameters-and-checkpoint-anatomy/">https://captwd.github.io/2026/09/06/pytorch-tensor-parameters-and-checkpoint-anatomy/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://captwd.github.io" target="_blank">captwd的笔记</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E7%A7%91%E6%99%AE/">科普</a><a class="post-meta__tags" href="/tags/PyTorch/">PyTorch</a><a class="post-meta__tags" href="/tags/%E6%98%BE%E5%AD%98/">显存</a><a class="post-meta__tags" href="/tags/%E8%AE%AD%E7%BB%83%E8%B0%83%E4%BC%98/">训练调优</a></div><div class="post-share"><div class="social-share" data-image="/img/me.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/09/06/what-cpu-gpu-memory-do-during-training/" title="训练时 CPU、内存、磁盘、GPU 都在干什么：一次实测画面的逐项解读"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">训练时 CPU、内存、磁盘、GPU 都在干什么：一次实测画面的逐项解读</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：硬件原理入门 ｜ 下一篇：PyTorch 参数解剖  上一篇讲了原理，这一篇是应用：拿一次真实训练的监测画面，逐项解释每个数字背后的流水线状态。画面快照（Windows 训练、有效 batch 64 时代）： 1234CPU   33% @3.19GHz内存  12.9 / 15.2GB (85%)磁盘  2%GPU   46%（专用显存 7.6GB）  配套的流水线是：离线预处理缓存 + 梯度累积 + num_workers + pinned memory + 每 epoch 存 258MB checkpoint。结论先给：瓶颈不是某个设备的算力，而是”链路延迟”——四部件都半闲。 1. 一条数据的完整旅程12345678910111213141516171819磁盘(NVMe, 2%)  └ 离线缓存 .npy / phonemes.json（首轮读一次，之后进页缓存）  └ 每 epoch 末：写 258MB checkpoint + tensorboard 追加事件        ↓内存(12.9/15.2...</div></div></div></a><a class="pagination-related" href="/2026/09/06/matcha-tts-vocoder-registry-metrics-and-demo/" title="工程改造三件套：声码器注册表、评价指标体系与静态 Demo 页"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">工程改造三件套：声码器注册表、评价指标体系与静态 Demo 页</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：PyTorch 参数解剖 ｜ 下一篇：ConvNeXt V2 与 MCD 震荡机制  模型训练之外，”怎么优雅地换声码器””怎么客观评价合成质量””怎么展示结果”这三件事同样值得工程化。这篇记录对 Matcha-TTS 做的三项改造：注册表重构、MCD&#x2F;WER&#x2F;CER 评价体系、以及一个纯静态试听 Demo 页。 一、声码器注册表：加新声码器只加文件问题原版推理框架里，声码器的加载是 if/else 硬编码。每接一个新声码器（HiFi-GAN 的各个版本、BigVGAN……）都要去改 cli.py 的主流程，越改越乱。 方案：装饰器注册表12345678# matcha/vocoders/__init__.py@register_vocoder(&quot;hifigan_T2_v1&quot;)def load_hifigan_t2(ckpt, device):    ...    return vocoder, denoiserdef load_vocoder(name, ckpt, dev...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/09/06/dl-hardware-primer/" title="硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-06</div><div class="info-item-2">硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：Windows 从零训练踩坑全集 ｜ 下一篇：训练时硬件实况解读  训练模型时，你会看到一堆数字：CPU 33%、GPU 46%、内存 85%、磁盘 2%。这些数字背后是一套物理结构在工作。这篇是一份”为深度学习而学”的硬件原理入门——不追踪某台机器的状态，只讲清 CPU、内存、磁盘、GPU 各自为什么长成这样，以及深度学习为什么把它们的特性放大。所有数字按典型消费级硬件给量级。 0. 世界观：延迟金字塔整台计算机的本质是一座为速度妥协容量的金字塔：每往下一层，容量大约 ×101000，但速度慢 ×1010000。    层级 延迟 量级    寄存器 ~0.3ns 字节级   L1&#x2F;L2 缓存 1~10ns KB~MB   L3 共享缓存 10~40ns 几十 MB   内存 DRAM ~100ns GB 级   NVMe SSD ~0.1ms TB 级   机械硬盘 ~10ms TB 级   换个”人类时间标尺”（把 1 个 CPU 周期放大成 1 秒），差距会非常直观：L1 命中 ≈ 4 秒，L3 ...</div></div></div></a><a class="pagination-related" href="/2026/09/06/what-cpu-gpu-memory-do-during-training/" title="训练时 CPU、内存、磁盘、GPU 都在干什么：一次实测画面的逐项解读"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-06</div><div class="info-item-2">训练时 CPU、内存、磁盘、GPU 都在干什么：一次实测画面的逐项解读</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：硬件原理入门 ｜ 下一篇：PyTorch 参数解剖  上一篇讲了原理，这一篇是应用：拿一次真实训练的监测画面，逐项解释每个数字背后的流水线状态。画面快照（Windows 训练、有效 batch 64 时代）： 1234CPU   33% @3.19GHz内存  12.9 / 15.2GB (85%)磁盘  2%GPU   46%（专用显存 7.6GB）  配套的流水线是：离线预处理缓存 + 梯度累积 + num_workers + pinned memory + 每 epoch 存 258MB checkpoint。结论先给：瓶颈不是某个设备的算力，而是”链路延迟”——四部件都半闲。 1. 一条数据的完整旅程12345678910111213141516171819磁盘(NVMe, 2%)  └ 离线缓存 .npy / phonemes.json（首轮读一次，之后进页缓存）  └ 每 epoch 末：写 258MB checkpoint + tensorboard 追加事件        ↓内存(12.9/15.2...</div></div></div></a><a class="pagination-related" href="/2026/09/11/integrate-bidirectional-mamba2-into-matcha-tts/" title="把双向 Mamba2 换进 Matcha-TTS 的 U-Net：设计、陷阱与验证"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-11</div><div class="info-item-2">把双向 Mamba2 换进 Matcha-TTS 的 U-Net：设计、陷阱与验证</div></div><div class="info-2"><div class="info-item-1"> 系列 · Matcha-TTS 训练手记 ｜ 目录 ｜ 上一篇：迁移 WSL2 与 mamba-ssm 安装 ｜ 下一篇：换骨干的公平评估  接上一篇，环境好了之后，这一篇讲真正的模型改造：把 Matcha-TTS 里 U-Net 的 Self-Attention 块换成双向 Mamba2，尽量做到”只换混合器、不碰框架”，并记录一个几乎所有人在把 Mamba 集成进已有模型时都会踩的初始化陷阱。 一、先看清要换的是哪一块Matcha-TTS 的声学骨干（estimator）是一个 1D U-Net，结构可以简写为： 123每级 down 块 = [ResnetBlock1D, n × 全局混合器块, 下采样]mid 段      = [ResnetBlock1D, n × 全局混合器块] × num_mid_blocks每级 up 块   = [ResnetBlock1D, n × 全局混合器块, 上采样]（含 skip 拼接）  其中：  ResnetBlock1D 负责局部特征 + 时间步条件注入（t → 正弦编码 → MLP → 逐块注入） 全局混合器块 默认是 dif...</div></div></div></a></div></div><hr class="custom-hr"/><div id="post-comment"><div class="comment-head"><div class="comment-headline"><i class="fas fa-comments fa-fw"></i><span> 评论</span></div></div><div class="comment-wrap"><div><div id="waline-wrap"></div></div></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/me.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/ loading='lazy'></div><div class="author-info-name">captwd</div><div class="author-info-description"></div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">25</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">56</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">6</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/captwd"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="https://github.com/captwd" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a><a class="social-icon" href="mailto:3498376281@qq.com" target="_blank" title="Email"><i class="fas fa-envelope" style="color: #4a7dbe;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">欢迎！</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-%E6%9C%80%E5%BA%95%E5%B1%82%EF%BC%9A%E4%B8%80%E4%B8%AA-Tensor-%E6%98%AF%E4%BB%80%E4%B9%88"><span class="toc-number">1.</span> <span class="toc-text">1. 最底层：一个 Tensor 是什么</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-%E6%A8%A1%E5%9D%97%E6%A0%91%EF%BC%9A%E5%8F%82%E6%95%B0%E5%A6%82%E4%BD%95%E8%A2%AB%E2%80%9D%E7%99%BB%E8%AE%B0%E2%80%9D%E5%92%8C%E2%80%9D%E7%BC%96%E5%9D%80%E2%80%9D"><span class="toc-number">2.</span> <span class="toc-text">2. 模块树：参数如何被”登记”和”编址”</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-Autograd%EF%BC%9A%E6%BF%80%E6%B4%BB%E4%BB%8E%E5%93%AA%E6%9D%A5%EF%BC%8C%E6%A2%AF%E5%BA%A6%E5%88%B0%E5%93%AA%E5%8E%BB"><span class="toc-number">3.</span> <span class="toc-text">3. Autograd：激活从哪来，梯度到哪去</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-%E4%B8%80%E4%B8%AA%E4%BC%98%E5%8C%96%E5%99%A8%E6%AD%A5%E7%9A%84%E5%AE%8C%E6%95%B4%E6%95%B0%E6%8D%AE%E6%B5%81"><span class="toc-number">4.</span> <span class="toc-text">4. 一个优化器步的完整数据流</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-%E6%98%BE%E5%AD%98%E5%9C%B0%E5%9B%BE%EF%BC%9A7-6GB-%E9%87%8C%E9%83%BD%E4%BD%8F%E4%BA%86%E4%BB%80%E4%B9%88"><span class="toc-number">5.</span> <span class="toc-text">5. 显存地图：7.6GB 里都住了什么</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-checkpoint-258MB-%E7%9A%84%E7%B2%BE%E7%A1%AE%E8%B4%A6%E6%9C%AC"><span class="toc-number">6.</span> <span class="toc-text">6. checkpoint 258MB 的精确账本</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#7-%E5%B8%B8%E8%A7%81%E7%96%91%E9%97%AE%E6%98%A0%E5%B0%84%E5%9B%9E%E8%BF%99%E5%A5%97%E6%A8%A1%E5%9E%8B"><span class="toc-number">7.</span> <span class="toc-text">7. 常见疑问映射回这套模型</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%B0%8F%E7%BB%93"><span class="toc-number">8.</span> <span class="toc-text">小结</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/20/hello-world/" title="Hello World">Hello World</a><time datetime="2026-09-20T13:03:38.594Z" title="发表于 2026-09-20 21:03:38">2026-09-20</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/19/metrics-three-layers/" title="读指标的三个层次：测量什么、扔掉什么、噪声多大">读指标的三个层次：测量什么、扔掉什么、噪声多大</a><time datetime="2026-09-19T02:20:00.000Z" title="发表于 2026-09-19 10:20:00">2026-09-19</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/19/alignment-ctc-transducer-aed-mas/" title="没有帧级标注，语音模型怎么活：CTC、Transducer、AED 与 MAS">没有帧级标注，语音模型怎么活：CTC、Transducer、AED 与 MAS</a><time datetime="2026-09-19T02:15:00.000Z" title="发表于 2026-09-19 10:15:00">2026-09-19</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/19/speech-ssl-three-paradigms/" title="掩码预测的副产品：自监督语音表征为什么&quot;接个头就能用&quot;">掩码预测的副产品：自监督语音表征为什么&quot;接个头就能用&quot;</a><time datetime="2026-09-19T02:10:00.000Z" title="发表于 2026-09-19 10:10:00">2026-09-19</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/19/conditions-and-cfg-in-cfm/" title="CFM 的条件与 CFG：模型怎么&quot;听话&quot;，大 s 为什么会出伪影">CFM 的条件与 CFG：模型怎么&quot;听话&quot;，大 s 为什么会出伪影</a><time datetime="2026-09-19T02:05:00.000Z" title="发表于 2026-09-19 10:05:00">2026-09-19</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By captwd</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.2</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.5</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><a id="to_comment" href="#post-comment" title="前往评论"><i class="fas fa-comments"></i></a><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.5"></script><script src="/js/main.js?v=5.5.5"></script><div class="js-pjax"><script>(() => {
+  let initFn = window.walineFn || null
+  const isShuoshuo = GLOBAL_CONFIG_SITE.pageType === 'shuoshuo'
+  const option = null
+
+  const destroyWaline = ele => ele.destroy()
+
+  const initWaline = (Fn, el = document, path = window.location.pathname) => {
+    const waline = Fn({
+      el: el.querySelector('#waline-wrap'),
+      serverURL: '',
+      pageview: false,
+      dark: 'html[data-theme="dark"]',
+      comment: false,
+      ...option,
+      path: isShuoshuo ? path : (option && option.path) || path
+    })
+
+    if (isShuoshuo) {
+      window.shuoshuoComment.destroyWaline = () => {
+        destroyWaline(waline)
+        if (el.children.length) {
+          el.innerHTML = ''
+          el.classList.add('no-comment')
+        }
+      }
+    }
+  }
+
+  const loadWaline = (el, path) => {
+    if (initFn) initWaline(initFn, el, path)
+    else {
+      btf.getCSS('https://cdn.jsdelivr.net/npm/@waline/client@3.15.2/dist/waline.min.css')
+        .then(() => import('https://cdn.jsdelivr.net/npm/@waline/client@3.15.2/dist/waline.min.js'))
+        .then(({ init }) => {
+          initFn = init || Waline.init
+          initWaline(initFn, el, path)
+          window.walineFn = initFn
+        })
+    }
+  }
+
+  if (isShuoshuo) {
+    'Waline' === 'Waline'
+      ? window.shuoshuoComment = { loadComment: loadWaline } 
+      : window.loadOtherComment = loadWaline
+    return
+  }
+
+  if ('Waline' === 'Waline' || !false) {
+    if (false) btf.loadComment(document.getElementById('waline-wrap'),loadWaline)
+    else setTimeout(loadWaline, 0)
+  } else {
+    window.loadOtherComment = loadWaline
+  }
+})()</script></div><video autoplay loop muted playsinline style="position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:-999;opacity:0.8;pointer-events:none;"><source src="/video/live.mp4" type="video/mp4"></video><script src="/mascot/looklook.js"></script><script src="/mascot/arkpets/lazy-load.js"></script><script src="/js/pagination-scroll.js"></script><script id="click-heart" src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/dist/click-heart.min.js" async="async" mobile="false"></script><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
