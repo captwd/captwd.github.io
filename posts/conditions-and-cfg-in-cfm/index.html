@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CFM 的条件与 CFG：模型怎么"听话"，大 s 为什么会出伪影 · captwd</title>
+  <meta name="description" content="条件注入的三条路，与 classifier-free guidance 的两副面孔——外推系数一大，伪影从哪里来。">
+  <link rel="stylesheet" href="../../css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+  <div class="bg-wrap">
+    <canvas id="bg" data-mode="ambient"></canvas>
+    <div class="bg-fallback"></div>
+  </div>
+  <div class="bg-veil"></div>
+
+  <header class="site-head">
+    <a class="brand" href="../../">
+      <span class="brand-dot"></span>
+      <span class="brand-name">captwd</span>
+      <span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+    </a>
+    <nav class="site-nav">
+      <a href="../../">首页</a>
+      <a href="../../posts/about-this-blog/">关于</a>
+      <a href="https://github.com/captwd" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="article-hero">
+    <div class="card-tags"><span class="card-tag">生成模型</span><span class="card-tag">CFG</span></div>
+    <h1>CFM 的条件与 CFG：模型怎么"听话"，大 s 为什么会出伪影</h1>
+    <div class="article-meta">2026-09-27 · captwd</div>
+  </section>
+
+  <div class="article-wrap">
+    <article class="article">
+      <p>上一笔记说清了速度场怎么学，这篇记它怎么"听话"。条件生成意味着速度场不只是 <code>v(x, t)</code>，而是 <code>v(x, t, c)</code>——条件 c 从哪里进网络，决定了模型理解条件的方式。主流论文里能看到三条路：</p>
+      <ul>
+        <li><strong>拼通道</strong>：把条件的表征和 x_t 在通道维拼接。Matcha 拼出 160 通道，E2/F5 同族也是 cat 进去。这是最"笨"也最稳的办法——网络自己学条件怎么用。</li>
+        <li><strong>加性/全局调制</strong>：条件映射成一组偏置或缩放，作用在每一层。DiT 系（F5 的骨干）用 adaLN：时间步和条件一起算出 per-channel 的 scale/shift。</li>
+        <li><strong>进序列</strong>：条件当 token 拼进序列，让注意力自己取用。文本条件在 LM 系架构里常走这条路。</li>
+      </ul>
+
+      <h2>CFG：训练丢条件，推理外推</h2>
+      <p>Classifier-free guidance 是个两副面孔的技巧。<strong>训练期</strong>：以概率 p（常见 0.1–0.2）把条件换成空条件，同一个网络于是既见过有条件的世界，也见过无条件的。<strong>推理期</strong>：把两个方向的预测线性外推——<code>v = v_uncond + s·(v_cond − v_uncond)</code>。s = 1 是纯条件，s = 0 是无条件，s &gt; 1 是往条件方向"更用力"。</p>
+
+      <h2>大 s 的伪影从哪里来</h2>
+      <p>外推是把预测点<strong>拉出模型见过的流形</strong>：s 越大，速度场被推得越远离训练分布覆盖的区域，高频伪影、过饱和、音质发紧都是这个机制的症状。在 TTS 里这有实测账：CFG 丢弃 0.2、s 取 0.7 的组合在 CosyVoice 里被验证过；s 一味调大，WER 可能还在降，但听感先崩——指标和听感的剪刀差，往往就是 guidance 在替模型硬掰。</p>
+
+      <blockquote>口径提醒：s 的甜点值和数据、条件强度、步数都耦合，换数据集直接照抄别人的 s 大概率翻车。</blockquote>
+
+      <p class="migrate-note">本文为迁移占位速记，完整正文在旧博客迁移中。</p>
+    </article>
+  </div>
+
+  <footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+
+  <div id="audio-ui" aria-label="声源选择"></div>
+
+  <script src="../../js/transition.js"></script>
+  <script type="module" src="../../js/wave.js"></script>
+</body>
+</html>

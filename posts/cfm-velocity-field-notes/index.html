@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>生成模型为什么可以只是一个 MSE：流匹配的速度场视角 · captwd</title>
+  <meta name="description" content="流匹配把去噪链换成一个速度场回归：几何直觉、OT 路径，以及它为什么让这一代 TTS 模型变得干净。">
+  <link rel="stylesheet" href="../../css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+  <div class="bg-wrap">
+    <canvas id="bg" data-mode="ambient"></canvas>
+    <div class="bg-fallback"></div>
+  </div>
+  <div class="bg-veil"></div>
+
+  <header class="site-head">
+    <a class="brand" href="../../">
+      <span class="brand-dot"></span>
+      <span class="brand-name">captwd</span>
+      <span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+    </a>
+    <nav class="site-nav">
+      <a href="../../">首页</a>
+      <a href="../../posts/about-this-blog/">关于</a>
+      <a href="https://github.com/captwd" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="article-hero">
+    <div class="card-tags"><span class="card-tag">生成模型</span><span class="card-tag">CFM</span></div>
+    <h1>生成模型为什么可以只是一个 MSE：流匹配的速度场视角</h1>
+    <div class="article-meta">2026-09-24 · captwd</div>
+  </section>
+
+  <div class="article-wrap">
+    <article class="article">
+      <p>扩散模型教我们的是：<strong>生成可以拆成一长串小步去噪</strong>。但每一步都在问同一个问题——当前这团混合了噪声的东西，该往哪里挪一点？流匹配把这个"往哪里挪"直接变成了被回归的对象：学一个速度场 <code>v(x, t)</code>，满足 <code>dx/dt = v(x, t)</code>，然后沿这条 ODE 从噪声积分到数据。生成不再是链条，而是一条被积分出来的轨迹。</p>
+
+      <h2>条件路径给了监督信号</h2>
+      <p>速度场本身是未知的，但我们可以自己构造"正确答案"：取一对噪声和数据点 <code>(x₀, x₁)</code>，定义直线路径 <code>x_t = (1−t)·x₀ + t·x₁</code>，它对时间的导数就是 <code>x₁ − x₀</code>。于是训练目标退化为一个再普通不过的回归——<strong>在给定 x_t 和 t 的条件下，用 MSE 去拟合 x₁ − x₀</strong>。没有对抗、没有逐级评分匹配的复杂权重，一个 MSE 而已。这就是"生成模型可以只是一个 MSE"的含义：难的不是损失函数，是损失函数背后的数据分布被编码进了速度场的几何里。</p>
+
+      <h2>直线路径 = 少步采样的底气</h2>
+      <p>为什么这一代 TTS 模型（Matcha、E2、F5）能用十几次前向就出音频？因为条件路径选了直线：如果一个速度场把所有点都沿直线走，理想的 ODE 是一步到位的；真实模型学到的场接近直线，所以 Euler 积分几步就收敛。采样步数（NFE）的预算，本质是在为"学到的场有多弯"买单。这也是为什么做采样器实验时，AB2 这类多步法对上 Euler 经常讨不到便宜——场够直的时候，一阶法就是最优性价比。</p>
+
+      <h2>CFM：不需要知道边缘分布</h2>
+      <p>单对 (x₀, x₁) 给出的速度场是"条件"的，把它们对所有配对平均得到的才是真实速度场。流匹配的漂亮之处在于：<strong>回归条件场的期望，等价于回归边缘场的期望</strong>，所以逐样本独立算损失即可，全程不需要估计概率密度的显式形式。这一步把连续 normalizing flow 从"必须可逆、必须算 Jacobian"的枷锁里放了出来。</p>
+
+      <p class="migrate-note">本文为迁移占位速记，完整正文在旧博客迁移中。</p>
+    </article>
+  </div>
+
+  <footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+
+  <div id="audio-ui" aria-label="声源选择"></div>
+
+  <script src="../../js/transition.js"></script>
+  <script type="module" src="../../js/wave.js"></script>
+</body>
+</html>

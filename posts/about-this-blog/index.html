@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>关于本站：为什么要 3D · captwd</title>
+  <meta name="description" content="把真实语音变成可以试听、选段、拉伸的声音画布，再探索频谱与生成路径的三维结构。">
+  <link rel="stylesheet" href="../../css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+  <div class="bg-wrap">
+    <canvas id="bg" data-mode="ambient"></canvas>
+    <div class="bg-fallback"></div>
+  </div>
+  <div class="bg-veil"></div>
+
+  <header class="site-head">
+    <a class="brand" href="../../">
+      <span class="brand-dot"></span>
+      <span class="brand-name">captwd</span>
+      <span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+    </a>
+    <nav class="site-nav">
+      <a href="../../">首页</a>
+      <a href="../../posts/about-this-blog/">关于</a>
+      <a href="https://github.com/captwd" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="article-hero">
+    <div class="card-tags"><span class="card-tag">meta</span></div>
+    <h1>关于本站：为什么要 3D</h1>
+    <div class="article-meta">2026-10-11 · captwd</div>
+  </section>
+
+  <div class="article-wrap">
+    <article class="article">
+      <p>这里是我的语音合成与深度学习笔记，也是一个小小的声音实验室。我想让访客能触碰一段声音：看到它的起伏，听到它代表的语音，再亲手改变它的尺度。</p>
+      <h2>全屏声音，独立笔记</h2>
+      <p>首页是一片铺满屏幕的声音山脉。视角贴近地形，前景山峰伸出画面，远处的频谱在雾中延展。拖动可以环视，滚轮或“＋／−”调节视距；点击山坡便能试听，并打开局部声音编辑。</p>
+      <p>笔记也藏在这片山脉里。环绕卡片用细线连到山脊光点，悬停时点亮对应的山坡；点击卡片或光点，都能进入正文。想静静观察地形时，可以隐去卡片，保留山间的阅读入口。正文里的“定位这篇笔记”会带你回到它的山峰。</p>
+      <p>研究笔记有独立页面，通过顶部导航或首页右下角进入。文章按生成模型、语音训练和站点手记筛选，进入正文后可以沿章节跳转，文末继续阅读相关笔记。浏览位置保存在当前浏览器，回来时可以从上次到达的章节继续；音乐在站内切换时保持播放。</p>
+      <h2>让一首钢琴曲长成山脉</h2>
+      <p>默认背景是一片由真实音乐频谱生成的三维地形：横向是对数频率，纵深是 32 秒的时间窗，山峰高度代表声音能量。光照、坡面和等高线展示声音的起伏，远处的山脉逐渐融进雾里。开始播放后，音乐的实际进度驱动地形向前流动。</p>
+      <p>指向山坡能看到对应时间和频率，点击就会从那一刻继续播放。选择“环视”后拖动可以转动山脉，“复位视角”回到初始角度。底部播放器保留整曲进度、音量和导入入口，进入文章时音乐也会继续。</p>
+      <p>内置钢琴曲是 Erik Satie 的《Gymnopédie No.1》，录音由 Teknopazzo 分享并以 CC0 发布，<a href="https://commons.wikimedia.org/wiki/File:Gymnopedie_No._1..ogg" target="_blank" rel="noopener">来源与授权</a>。音乐文件与频谱数据保存在站内。你也可以导入自己的纯音乐，浏览器会在本地分析频谱，生成属于这首音乐的山脉。</p>
+      <h2>只雕刻山脉中的一小段</h2>
+      <p>用“选段”拖过一片山脉，选中最多 12 秒的声音；紫色区域和两端手柄会标出它的范围。切到“拉伸”，横向拖动这片区域改变时长，纵向拖动改变振幅。山体和真实声音一起变化，松手后试听选中的片段。播放整首音乐时，这一段保留变形，其余部分继续使用原始声音。</p>
+      <p>“撤销变形”可以恢复原始尺度，× 取消选段。当前可以雕刻一个活动片段，重新选段会替换前一次变形，音乐文件本身不会被改写。时间拉伸使用 WSOLA，尽量保留音高。</p>
+      <p>鼠标走过的地方留下光粒，点击产生扩散涟漪，拉伸时紫色光点从山体上浮。你可以通过“光粒”按钮关闭这些效果；系统减少动态效果时不生成粒子动画。</p>
+      <h2>实验室：波形是一段可以试听的时间</h2>
+      <p>切换到实验室后，画布完整展示一段真实语音。横轴对应音频时间，纵向是归一化振幅的峰值包络与采样点。点按某处，会从那里试听约 1.6 秒；横向拖动可以选择片段，两个发光手柄可以微调边界。播放游标与声音使用同一条时间轴。</p>
+      <p>默认的喜悦／悲伤样本来自我的 Matcha-TTS 情感合成实验。你也可以导入自己的音频，或者录制最长 12 秒的声音。音频在当前浏览器中处理。</p>
+      <h2>看到变化，也听见变化</h2>
+      <p>时间拉伸只作用于选中片段：片段会在画布中舒展或压缩，播放时也会变长或变短。这里使用波形相似性重叠相加（WSOLA），尽量保留音高；复杂语音和较大倍率下仍可能出现处理痕迹。振幅控制会同步改变声音增益与波形高度，变换后的片段可保存为 WAV。</p>
+      <h2>同一个声音，三种空间</h2>
+      <ul>
+        <li><strong>波形</strong>：直接从解码后的 PCM 计算峰值包络和采样点。立体声音频的画面展示第一声道，播放与导出保留声道。</li>
+        <li><strong>频谱</strong>：短时傅里叶变换把声音展开为三维地形。横向是时间，纵深是对数频率，高度与颜色表示能量。</li>
+        <li><strong>生成路径</strong>：固定高斯噪声点云与真实语音采样点之间的线性插值，<code>xₜ = (1 − t) ε + t x</code>。它展示流匹配中概率路径的几何直觉，是教学示意，没有运行或训练模型，也不代表学习到的潜空间。</li>
+      </ul>
+      <p>在“旋转”工具下拖动画布，可以从另一个角度看这些结构。回到“选段”，横轴上的位置仍然对应声音时间。</p>
+      <h2>让实验有趣，也让笔记好读</h2>
+      <p>文章页压暗背景并继续播放音乐。实验室语音与背景音乐互斥，避免声音重叠。流动背景以约 30 fps 绘制，页面隐藏时暂停渲染；减少动态效果时关闭无声预览流动。WebGL 不可用时提供二维波形。</p>
+      <p>技术栈：原生 HTML/CSS/JavaScript、three.js、Web Audio。资源保存在本地，没有构建步骤。</p>
+    </article>
+  </div>
+
+  <footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+
+  <div id="audio-ui" aria-label="声源选择"></div>
+
+  <script src="../../js/transition.js"></script>
+  <script type="module" src="../../js/wave.js"></script>
+</body>
+</html>
+
+

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>300M 量级语音模型学习率速查：一个窄带里的两个世界 · captwd</title>
+  <meta name="description" content="同量级语音生成论文的超参表读法：峰值学习率挤在窄带里，batch 的单位让同一个数字含义完全不同。">
+  <link rel="stylesheet" href="../../css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+  <div class="bg-wrap">
+    <canvas id="bg" data-mode="ambient"></canvas>
+    <div class="bg-fallback"></div>
+  </div>
+  <div class="bg-veil"></div>
+
+  <header class="site-head">
+    <a class="brand" href="../../">
+      <span class="brand-dot"></span>
+      <span class="brand-name">captwd</span>
+      <span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+    </a>
+    <nav class="site-nav">
+      <a href="../../">首页</a>
+      <a href="../../posts/about-this-blog/">关于</a>
+      <a href="https://github.com/captwd" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="article-hero">
+    <div class="card-tags"><span class="card-tag">训练</span><span class="card-tag">TTS</span></div>
+    <h1>300M 量级语音模型学习率速查：一个窄带里的两个世界</h1>
+    <div class="article-meta">2026-10-02 · captwd</div>
+  </section>
+
+  <div class="article-wrap">
+    <article class="article">
+      <p>扒几篇同量级（200M–400M）语音生成论文的超参表，会发现一个安心的现象：<strong>优化器几乎都是 AdamW + warmup + cosine/衰减，峰值学习率挤在 1e-4 到 5e-4 的窄带里</strong>。300M 上下的模型，2e-4 附近是安全牌。但这张表只对了一半——另一半藏在 batch 的单位里。</p>
+
+      <h2>同一个数字，两个世界</h2>
+      <p>有的论文按 token 计 batch（LM 系），有的按帧计（E2/F5 一族的流匹配骨干，一帧几万样本），有的按句计。学习率和有效 batch 是绑在一起生效的：按帧计的一个"batch 64"，折算成梯度样本量可能是按句计的几十倍。所以"照抄别人的学习率"必须连单位一起抄，否则数字相同、含义完全不同。线性缩放规则在这里仍然是大方向：batch 翻倍，学习率跟着往上挪一点。</p>
+
+      <h2>几条实战锚点</h2>
+      <ul>
+        <li>warmup 占比常见 1%–5%，小数据集别省——前几百步的抖动对 mel 谱这样的逐帧目标很敏感。</li>
+        <li>cosine 衰减到峰值的 1/10 左右收尾，比直接衰减到 0 稳，后期重震荡少。</li>
+        <li>换骨干不等于换学习率：U-Net 换成 DiT 后，同一 LR 下的早期 loss 曲线形状会变，先跑几百步看斜率再定去留。</li>
+        <li>8 卡数据并行时，LR 按全局 batch 算，别按单卡 batch 算——这是最容易犯的记账错误。</li>
+      </ul>
+
+      <blockquote>这张速查的用法是"先落在窄带里，再看曲线微调"，不是"窄带里随便挑"。学习率判断失误的账，我记过一次，不想记第二次。</blockquote>
+
+      <p class="migrate-note">本文为迁移占位速记，完整正文在旧博客迁移中。</p>
+    </article>
+  </div>
+
+  <footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+
+  <div id="audio-ui" aria-label="声源选择"></div>
+
+  <script src="../../js/transition.js"></script>
+  <script type="module" src="../../js/wave.js"></script>
+</body>
+</html>

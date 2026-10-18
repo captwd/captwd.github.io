@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>captwd · 波形笔记</title><meta name="description" content="把声音当作可以触碰的材料。试听、拉伸、探索声音的三维结构，以及语音合成与生成模型的研究笔记。">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}</script>
+</head>
+<body class="music-mode soundscape-home">
+  <div class="bg-wrap"><canvas id="bg"></canvas><div class="bg-fallback"></div></div><div class="bg-veil"></div>
+  <header class="site-head"><a class="brand" href="./"><span class="brand-dot"></span><span class="brand-name">captwd<span class="brand-slash"> / </span>波形笔记</span></a><nav class="site-nav"><a href="#sound-lab">声音实验室 ↗</a><a href="notes/" data-notes-nav>研究笔记 ↗</a><a href="posts/about-this-blog/">关于</a><a href="https://github.com/captwd" target="_blank" rel="noopener">GitHub ↗</a></nav></header>
+  <section class="hero sound-lab" id="sound-lab">
+    <div class="lab-intro" id="soundscape" data-fx-cheap="1"><div><div class="hero-kicker"><i></i> AN IMMERSIVE LANDSCAPE OF SOUND</div><h1>声音，<span>有形。</span></h1><p class="intro-lab-copy">写语音合成，也让声音自己说话。<br>触碰一段波形，听见它；改变它的尺度，探索它的空间。</p><p class="intro-music-copy">让一首钢琴曲，成为身临其境的山脉。<br>拖动环视 · 滚轮缩放 · 点击山峰，听见这一刻。</p></div><div class="intro-aside"><span class="edition">LISTEN. WANDER. DISCOVER.</span><span class="aside-line"></span><p>让频率成为山脊，<br>让声音有了纵深。</p><span class="small-mono">A LANDSCAPE MADE OF SOUND</span></div></div>
+    <div class="lab-workbench" data-fx-cheap="1">
+      <div class="lab-topline"><div class="lab-label"><span class="index-number">01</span> 声音的形状 <span class="live-dot"></span></div><div class="view-tabs" role="group" aria-label="声音视图"><button class="active" data-view="wave" aria-pressed="true">波形<span>WAVE</span></button><button data-view="spectrum" aria-pressed="false">频谱<span>SPECTRUM</span></button><button data-view="flow" aria-pressed="false">生成路径<span>FLOW</span></button></div></div>
+      <div class="source-bar"><div class="source-list" role="group" aria-label="选择声音"><span class="source-prefix">声源</span><button class="source-button active" data-source="happy" aria-pressed="true"><span>01</span> 喜悦</button><button class="source-button" data-source="sad" aria-pressed="false"><span>02</span> 悲伤</button><label class="source-button upload-label" for="audio-file">＋ 导入声音<input id="audio-file" type="file" accept="audio/*" hidden></label><button class="source-button" id="record-button">◉ 录一段</button></div><div class="sample-info" id="sample-info">正在读取声音…</div></div>
+      <div class="wave-stage" id="wave-stage" tabindex="0" aria-label="交互声音画布。点按试听，横向拖动选段。左右方向键移动选段，空格播放。">
+        <div class="stage-corner corner-tl"></div><div class="stage-corner corner-tr"></div><div class="stage-corner corner-bl"></div><div class="stage-corner corner-br"></div>
+        <div class="plot-caption"><span id="plot-title">AMPLITUDE / TIME</span><small id="plot-description">每一个起伏，都来自这段声音</small></div>
+        <div class="stage-tools" role="group" aria-label="画布工具"><button data-tool="select" class="active" aria-pressed="true" title="拖动选择时间片段">⌁ 选段</button><button data-tool="stretch" aria-pressed="false" title="横向拖动拉伸时间，纵向拖动改变振幅">↔ 拉伸</button><button data-tool="orbit" aria-pressed="false" title="拖动旋转三维视角">⤢ 旋转</button></div>
+        <div class="flow-control" hidden><div><span>噪声</span><output id="flow-value">t = 1.00</output><span>语音</span></div><input id="flow-slider" aria-label="噪声到语音的插值位置" type="range" min="0" max="1" step="0.01" value="1"><small>线性概率路径示意 · 非模型推理</small></div>
+        <canvas id="wave-fallback" aria-hidden="true"></canvas>
+        <button class="selection-handle handle-start" data-handle="start" role="slider" aria-label="选段开始时间" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" title="拖动调整起点"><span></span></button><button class="selection-handle handle-end" data-handle="end" role="slider" aria-label="选段结束时间" aria-valuemin="0" aria-valuemax="1" aria-valuenow="1" title="拖动调整终点"><span></span></button>
+        <div class="hover-time" id="hover-time" hidden>0.00 s</div><div class="stage-instruction" id="stage-instruction">点按试听 · 拖动选段</div><div class="axis-label">TIME <span>/ s</span></div><div class="time-ticks" id="time-ticks"></div>
+      </div>
+      <div class="lab-console">
+        <div class="transport"><button class="play-button" id="play-button" aria-label="播放选段" disabled><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l12-7z" fill="currentColor"/></svg></button><div class="transport-copy"><div class="transport-title" id="clip-title">Matcha-TTS · 喜悦</div><div class="selection-readout"><span id="selection-readout">0.00 — 0.00 s</span><span class="readout-separator">/</span><span id="output-duration">选中片段</span></div><div class="play-progress"><i id="play-progress"></i></div></div><button class="icon-button" id="download-button" aria-label="下载变换后的选段 WAV" title="保存这段声音" disabled>↓</button></div>
+        <div class="parameter"><label for="stretch-slider">时间拉伸 <output id="stretch-value">1.00×</output></label><input type="range" id="stretch-slider" min="0.6" max="1.8" step="0.05" value="1" aria-describedby="stretch-help"><div class="range-ends"><span>紧凑</span><span id="stretch-help">尽量保留音高</span><span>舒展</span></div></div>
+        <div class="parameter"><label for="gain-slider">振幅 <output id="gain-value">0 dB</output></label><input type="range" id="gain-slider" min="-18" max="6" step="1" value="0"><div class="range-ends"><span>轻声</span><span>响亮</span></div></div><button class="reset-button" id="reset-button" title="重置声音参数与视角">↺<span>重置</span></button>
+      </div>
+      <div class="lab-footnote"><span id="lab-status" role="status" aria-live="polite">声音只在你点击后播放。</span><span>拖动改变结构，再按播放听见变化 <span class="keycap">SPACE</span></span></div>
+    </div>
+    <div class="journal-cue" data-fx-cheap="1"><a href="notes/">研究笔记 <span>↗</span></a><span>FREQUENCY / TIME / ENERGY</span></div>
+  </section>
+  <main class="content soundscape-placeholder" hidden></main>
+  <footer class="site-foot"><span>© 2026 captwd · 波形笔记</span><span>MADE OF SOUND. BUILT WITH CURIOSITY.</span></footer>
+  <script src="js/posts.js"></script><script src="js/site.js"></script><div id="audio-ui" aria-label="声音播放器"></div><script src="js/transition.js"></script><script type="module" src="js/wave.js"></script>
+</body>
+</html>
+
+
