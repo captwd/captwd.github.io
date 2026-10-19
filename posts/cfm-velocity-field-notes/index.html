@@ -4,7 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>生成模型为什么可以只是一个 MSE：流匹配的速度场视角 · captwd</title>
-  <meta name="description" content="流匹配把去噪链换成一个速度场回归：几何直觉、OT 路径，以及它为什么让这一代 TTS 模型变得干净。">
+  <meta name="description" content="流匹配（CFM/rectified flow）的核心机制拆解：线性插值路径怎么同时造出训练输入和监督标签、&quot;速度恒定&quot;到底恒的是哪个轴、MSE 为什么恰好是数学上选对的损失，以及一行算术外推出&quot;生成中的 mel&quot;的 x1_hat。">
+  <link rel="canonical" href="https://captwd.github.io/posts/cfm-velocity-field-notes/">
+  <meta property="og:type" content="article"><meta property="og:site_name" content="captwd · 波形笔记"><meta property="og:title" content="生成模型为什么可以只是一个 MSE：流匹配的速度场视角 · captwd"><meta property="og:description" content="流匹配（CFM/rectified flow）的核心机制拆解：线性插值路径怎么同时造出训练输入和监督标签、&quot;速度恒定&quot;到底恒的是哪个轴、MSE 为什么恰好是数学上选对的损失，以及一行算术外推出&quot;生成中的 mel&quot;的 x1_hat。"><meta property="og:url" content="https://captwd.github.io/posts/cfm-velocity-field-notes/"><meta property="og:image" content="https://captwd.github.io/assets/share-card.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="article:published_time" content="2026-09-19">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="生成模型为什么可以只是一个 MSE：流匹配的速度场视角 · captwd"><meta name="twitter:description" content="流匹配（CFM/rectified flow）的核心机制拆解：线性插值路径怎么同时造出训练输入和监督标签、&quot;速度恒定&quot;到底恒的是哪个轴、MSE 为什么恰好是数学上选对的损失，以及一行算术外推出&quot;生成中的 mel&quot;的 x1_hat。"><meta name="twitter:image" content="https://captwd.github.io/assets/share-card.png">
+  <link rel="alternate" type="application/rss+xml" title="captwd · 波形笔记 RSS" href="https://captwd.github.io/rss.xml"><link rel="alternate" type="application/atom+xml" title="captwd · 波形笔记 Atom" href="https://captwd.github.io/atom.xml">
   <link rel="stylesheet" href="../../css/style.css">
   <script type="importmap">
   {
@@ -35,27 +39,72 @@
     </nav>
   </header>
 
-  <section class="article-hero">
-    <div class="card-tags"><span class="card-tag">生成模型</span><span class="card-tag">CFM</span></div>
-    <h1>生成模型为什么可以只是一个 MSE：流匹配的速度场视角</h1>
-    <div class="article-meta">2026-09-24 · captwd</div>
-  </section>
+  <section class="article-hero"><div class="card-tags"><span class="card-tag">流匹配</span><span class="card-tag">TTS</span><span class="card-tag">语音合成</span><span class="card-tag">学习笔记</span></div><h1>生成模型为什么可以只是一个 MSE：流匹配的速度场视角</h1><div class="article-meta">2026-09-19 · captwd</div></section>
 
   <div class="article-wrap">
-    <article class="article">
-      <p>扩散模型教我们的是：<strong>生成可以拆成一长串小步去噪</strong>。但每一步都在问同一个问题——当前这团混合了噪声的东西，该往哪里挪一点？流匹配把这个"往哪里挪"直接变成了被回归的对象：学一个速度场 <code>v(x, t)</code>，满足 <code>dx/dt = v(x, t)</code>，然后沿这条 ODE 从噪声积分到数据。生成不再是链条，而是一条被积分出来的轨迹。</p>
+    <article class="article"><blockquote>
+<p>「语音模型学习笔记」系列：<a href="/posts/cfm-velocity-field-notes/">① 速度场</a> ｜ <a href="/posts/conditions-and-cfg-in-cfm/">② 条件与 CFG</a> ｜ <a href="/posts/speech-ssl-three-paradigms/">③ 自监督表征</a> ｜ <a href="/posts/alignment-ctc-transducer-aed-mas/">④ 对齐四范式</a> ｜ <a href="/posts/metrics-three-layers/">⑤ 指标的三个层次</a></p>
+</blockquote>
+<p>Matcha-TTS 和 F5-TTS 这类流匹配 TTS，训练损失只有一个 MSE。第一眼看很难接受：生成一段语音，不应该是很复杂的事吗——对抗训练、噪声调度表、自回归逐字预测，怎么轮到流匹配就只剩下一个均方误差？这篇把这件事拆开。</p>
+<p>公式全部采用 Matcha 的 <code>flow_matching.py</code> 和 F5 的 <code>cfm.py</code> 里的实际写法，两个仓库这两段代码几乎逐字相同。</p>
+<h2 id="从噪声到-mel：一条直线"><a href="#从噪声到-mel：一条直线" class="headerlink" title="从噪声到 mel：一条直线"></a>从噪声到 mel：一条直线</h2><p>训练数据里有一段真实 mel 频谱 <code>x₁</code>（80 通道 × T 帧），再采一捧同形状的高斯噪声 <code>x₀</code>。流的任务是把噪声搬运到数据，rectified flow 把这条路定义为<strong>两点之间的直线段</strong>：</p>
+<pre><code>x_t = (1 − t)·x₀ + t·x₁          # t ∈ [0,1]，逐元素的凸组合 </code></pre>
 
-      <h2>条件路径给了监督信号</h2>
-      <p>速度场本身是未知的，但我们可以自己构造"正确答案"：取一对噪声和数据点 <code>(x₀, x₁)</code>，定义直线路径 <code>x_t = (1−t)·x₀ + t·x₁</code>，它对时间的导数就是 <code>x₁ − x₀</code>。于是训练目标退化为一个再普通不过的回归——<strong>在给定 x_t 和 t 的条件下，用 MSE 去拟合 x₁ − x₀</strong>。没有对抗、没有逐级评分匹配的复杂权重，一个 MSE 而已。这就是"生成模型可以只是一个 MSE"的含义：难的不是损失函数，是损失函数背后的数据分布被编码进了速度场的几何里。</p>
+<p>这是”加噪声”的一步——想象一张频谱从雪花点里逐渐析出的过程：t=0 整张图是纯噪声，t=1 是干净 mel，t=0.5 时<strong>每一个</strong> bin 都恰好是一半噪声一半真值。每次训练随机抽一个 t，得到直线上的一个点。</p>
+<h2 id="一个采样同时造出输入和标签"><a href="#一个采样同时造出输入和标签" class="headerlink" title="一个采样同时造出输入和标签"></a>一个采样同时造出输入和标签</h2><p>速度场网络需要 (位置， 速度) 成对的数据，而直线在这里白送了标签——对 <code>x_t</code> 关于 t 求导：</p>
+<pre><code>d/dt [(1−t)·x₀ + t·x₁] = x₁ − x₀ </code></pre>
 
-      <h2>直线路径 = 少步采样的底气</h2>
-      <p>为什么这一代 TTS 模型（Matcha、E2、F5）能用十几次前向就出音频？因为条件路径选了直线：如果一个速度场把所有点都沿直线走，理想的 ODE 是一步到位的；真实模型学到的场接近直线，所以 Euler 积分几步就收敛。采样步数（NFE）的预算，本质是在为"学到的场有多弯"买单。这也是为什么做采样器实验时，AB2 这类多步法对上 Euler 经常讨不到便宜——场够直的时候，一阶法就是最优性价比。</p>
+<p>路径是直的，速度沿路径<strong>处处恒定</strong>。于是两行代码同时给出训练输入和监督目标：</p>
+<pre><code>y_t = (1 - t) * x0 + t * x1      # 题干：现在在哪 u   = x1 - x0                    # 答案：该往哪走、走多快 loss = F.mse_loss(v_theta(y_t, t, cond), u) </code></pre>
 
-      <h2>CFM：不需要知道边缘分布</h2>
-      <p>单对 (x₀, x₁) 给出的速度场是"条件"的，把它们对所有配对平均得到的才是真实速度场。流匹配的漂亮之处在于：<strong>回归条件场的期望，等价于回归边缘场的期望</strong>，所以逐样本独立算损失即可，全程不需要估计概率密度的显式形式。这一步把连续 normalizing flow 从"必须可逆、必须算 Jacobian"的枷锁里放了出来。</p>
+<p>拿具体数字走一遍：某个 bin 上 <code>x₀=−1.2</code>、<code>x₁=0.8</code>、<code>t=0.25</code>，那么插值样本 <code>x_t = 0.75×(−1.2) + 0.25×0.8 = −0.7</code>，目标速度 = <code>0.8 − (−1.2) = 2.0</code>。网络的任务：给它 (−0.7, t=0.25) 和文本条件，猜出 2.0 这个方向。无数组 (x₀, x₁, t) 扫下来，网络学到的就是把噪声分布搬运到数据分布的场。</p>
+<h2 id="“速度恒定”恒的是时间轴，不是空间轴"><a href="#“速度恒定”恒的是时间轴，不是空间轴" class="headerlink" title="“速度恒定”恒的是时间轴，不是空间轴"></a>“速度恒定”恒的是时间轴，不是空间轴</h2><p>这里有个容易绕晕的地方。”直线速度恒定”说的是：<strong>对固定的 (x₀, x₁) 这一对，速度沿 t 不变</strong>——在 t=0.2 处问和 t=0.7 处问，答案都是 x₁−x₀。恒定是<strong>时间轴上的性质</strong>。</p>
+<p>而频谱有 80×T 个位置，每个位置有自己的 (x₀, x₁)、自己的小直线、自己的那个恒定速度。一张 mel 的流，是 80×T 条互不相同的小直线并行发生。所以：</p>
+<ul>
+<li><strong>被广播的是 t，不是 v</strong>。t 是钟，形状 (B,1,1)，整条频谱共享同一时刻；v 的形状是实打实的 (B,80,T)，逐元素各不相同，没有任何广播。</li>
+<li>网络能给出逐元素不同的速度，是因为输入 <code>x_t</code> 本身就是完整的场——每个位置带着自己的混合状态，卷积/注意力还让它看得见邻居帧。元音帧和静音帧、低频段和高频段，”该往哪走”完全不同。</li>
+</ul>
+<h2 id="MSE-不是”好用”，是”恰好选对”"><a href="#MSE-不是”好用”，是”恰好选对”" class="headerlink" title="MSE 不是”好用”，是”恰好选对”"></a>MSE 不是”好用”，是”恰好选对”</h2><p>更深一层的保证：同一个位置 x_t 可能来自<strong>无穷多组不同的 (x₀, x₁)</strong>，不同组给出的答案 x₁−x₀ 并不一样。MSE 回归的统计性质是最优预测等于<strong>条件期望</strong>，所以网络在每一点学到的是</p>
+<pre><code>v(x_t, t) = E[ x₁ − x₀ | x_t = x, t, 条件 ] </code></pre>
 
-      <p class="migrate-note">本文为迁移占位速记，完整正文在旧博客迁移中。</p>
-    </article>
+<p>即”所有能到达这个位置的路径的方向平均”——而这恰好被证明就是<strong>边际速度场</strong>：沿它积分，概率路径与真实数据分布完全一致。换句话说，MSE 在这个框架里不是”工程上凑合的损失”，而是数学上恰好选对的损失。</p>
+<h2 id="训练与推理：同一个场的两副面孔"><a href="#训练与推理：同一个场的两副面孔" class="headerlink" title="训练与推理：同一个场的两副面孔"></a>训练与推理：同一个场的两副面孔</h2><p>CFM 外壳本身没有可训练参数（网络挂在 <code>CFM.estimator</code> / <code>CFM.transformer</code> 上），它在两个阶段扮演不同角色，<strong>调的都是同一个网络</strong>：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>网络前向次数</th>
+<th>输出拿来干嘛</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>训练一步</td>
+<td>1 次（采一个 t，单点回归）</td>
+<td>和 x₁−x₀ 算 MSE，更新权重</td>
+</tr>
+<tr>
+<td>推理一次合成</td>
+<td>n 次（n = ODE 步数）</td>
+<td>每次迈一步 <code>x += dt·v</code>，积分到 t=1</td>
+</tr>
+</tbody></table>
+<p>训练时执行的是 CFM 的损失构造逻辑，推理时执行的是它的 ODE 积分逻辑——“训练学场、用场”。</p>
+<h2 id="顺路解决一个工程问题：x1-hat"><a href="#顺路解决一个工程问题：x1-hat" class="headerlink" title="顺路解决一个工程问题：x1_hat"></a>顺路解决一个工程问题：x1_hat</h2><p>有些设计需要拿到”模型正在生成的 mel”——比如在生成的频谱上接一个辅助分类器。但 CFM 训练模式下模型从不生成完整 mel：每个训练步只做”采一个点、答一次速度、算个 MSE”。朴素解法是把整条 ODE 跑完，成本 ×n_timesteps，不可接受。</p>
+<p>解法是一行算术：用网络自己预测的速度，把当前样本<strong>外推到路径终点</strong>：</p>
+<pre><code>x1_hat = y_t + (1−t)·v </code></pre>
+
+<p>直观含义：t=0.25 时，”当前位置 + 剩余路程比例 × 全程速度 = 终点估计”。把它和理想速度 u = x₁−(1−σ_min)x₀ 代数展开：</p>
+<pre><code>y_t + (1−t)·u = x₁ + σ_min·z </code></pre>
+
+<p>残差恰好是 σ_min 乘噪声——σ_min = 1e-4，比信号小四个数量级，可忽略。所以线性路径下这个反推<strong>近乎精确恒等式</strong>；用学到的 v_θ 时代价多一项 <code>(1−t)·(v_θ − u)</code>，即”剩余路程 × 速度预测误差”——训练早期 x1_hat 很糊，这是正常的。它的价值：零额外成本、可微，梯度能穿过它流回生成器。</p>
+<p>注意方向：加噪声发生在构造 x_t 那一步；x1_hat 干的是<strong>甩掉噪声估终点</strong>，不是反过来。</p>
+<h2 id="尾注"><a href="#尾注" class="headerlink" title="尾注"></a>尾注</h2><p>这条”直线 + MSE”的框架还解释了流匹配 TTS 的两个工程特征：</p>
+<ul>
+<li><strong>为什么 10 步 ODE 就够</strong>：路径几乎笔直，Euler 积分误差小；条件越充分（帧级文本条件、说话人、情感），流要搬运的随机性越少，路径越直。</li>
+<li><strong>为什么推理还能再快</strong>：均匀时间轴可以重参数化——把步长挪到场弯曲最厉害的噪声端。实测见 <a href="/posts/sway-sampling-for-flow-matching-tts/">Sway Sampling 实测：少步数推理的收益与代价</a>。</li>
+</ul>
+<p>下一篇讲这个框架里最重要的设计问题：<strong>条件怎么进网络、引导强度怎么加</strong>——以及 CFG 的大 s 为什么会合成出鬼影。→ <a href="/posts/conditions-and-cfg-in-cfm/">CFM 的条件与 CFG</a></p>
+</article>
   </div>
 
   <footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>

@@ -9,13 +9,14 @@ const STORAGE = 'wave-notes-reading-v1';
 export class StoryLandscape {
   constructor({terrain,root, reduced = false, schedule}) {
     this.terrain=terrain;this.root=root;this.reduced=reduced;this.schedule=schedule;
-    this.entries=[];this.topic='全部';this.current='';this.progress=0;this.scrollFrame=0;
+    this.entries=[];this.topic='全部';this.year='全部';this.query='';this.searchIndex=null;this.indexPending=false;this.indexFailures=0;this.current='';this.progress=0;this.scrollFrame=0;
     try { const saved=JSON.parse(localStorage.getItem(STORAGE)||'{}');this.history=saved&&typeof saved==='object'&&!Array.isArray(saved)?saved:{}; } catch { this.history={}; }
     this.start().catch(()=>{});
   }
   async start() {
     if(!Array.isArray(window.POSTS))await import('./posts.js');
     if(!window.renderCards)await import('./site.js');
+    // Keep the source order for the soundscape's spatial article layout; the library cards sort separately.
     this.posts=window.POSTS;
     this.entries=this.posts.map((post,index)=>({post,index,map:post.landscape||{label:post.title,region:post.tags[0],color:'#a1f9d5'},visible:true}));
     this.topics=['全部',...new Set(this.entries.map(entry=>entry.map.region))];
@@ -33,6 +34,12 @@ export class StoryLandscape {
       const button=event.target.closest('.journal-filters [data-topic]');
       if(button){this.topic=button.dataset.topic;this.applyFilter();}
     });
+    document.addEventListener('input',event=>{
+      if(event.target.matches('#notes-search')){this.query=event.target.value.trim();this.applyFilter();if(this.query)this.ensureSearchIndex();}
+    });
+    document.addEventListener('change',event=>{
+      if(event.target.matches('#notes-year')){this.year=event.target.value||'全部';this.applyFilter();}
+    });
     const scroll=()=>{if(this.scrollFrame)return;this.scrollFrame=requestAnimationFrame(()=>{this.scrollFrame=0;this.updateProgress();});};
     window.addEventListener('scroll',scroll,{passive:true});window.addEventListener('resize',scroll);
     window.addEventListener('pagehide',()=>this.saveHistory(true));
@@ -40,10 +47,18 @@ export class StoryLandscape {
   }
   applyFilter(){
     if(!this.posts)return;
-    this.entries.forEach(entry=>entry.visible=this.topic==='全部'||entry.map.region===this.topic);
+    const query=this.query.toLocaleLowerCase('zh-CN');
+    this.entries.forEach(entry=>{
+      const topicMatches=this.topic==='全部'||entry.map.region===this.topic;
+      const yearMatches=this.year==='全部'||entry.post.date.slice(0,4)===this.year;
+      const metadata=[entry.post.title,entry.post.excerpt,...entry.post.tags].join(' ').toLocaleLowerCase('zh-CN');
+      const searchable=query?`${metadata} ${this.searchIndex?.get(entry.post.slug)||''}`:'';
+      entry.visible=topicMatches;
+      entry.libraryVisible=topicMatches&&yearMatches&&(!query||searchable.includes(query));
+    });
     document.querySelectorAll('.card[data-post-slug]').forEach(card=>{
       const entry=this.entries.find(item=>item.post.slug===card.dataset.postSlug),saved=this.history[card.dataset.postSlug];
-      card.hidden=!!entry&&!entry.visible;card.classList.toggle('story-visited',!!saved);
+      card.hidden=!!entry&&!entry.libraryVisible;card.classList.toggle('story-visited',!!saved);
       if(entry)card.style.setProperty('--story-color',entry.map.color);
     });
     const heading=document.querySelector('main.notes-library .journal-heading');
@@ -57,7 +72,35 @@ export class StoryLandscape {
       }
       filters.querySelectorAll('[data-topic]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.topic===this.topic)));
     }
+    const yearSelect=document.querySelector('#notes-year');
+    if(yearSelect){
+      const years=[...new Set(this.posts.map(post=>post.date.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
+      yearSelect.innerHTML='<option value="全部">全部年份</option>'+years.map(year=>`<option value="${year}">${year}</option>`).join('');
+      yearSelect.value=this.year;
+    }
+    const searchInput=document.querySelector('#notes-search');if(searchInput&&searchInput.value!==this.query)searchInput.value=this.query;
+    const count=this.entries.filter(entry=>entry.libraryVisible).length;
+    const status=document.querySelector('#notes-results-status');
+    if(status){
+      status.textContent=this.indexPending&&query?'正在搜索标题、摘要、标签和正文…':this.indexFailures&&query?`找到 ${count} 篇；部分正文暂时无法读取，仍可搜索标题、摘要和标签。`:`找到 ${count} 篇笔记`;
+    }
+    const empty=document.querySelector('#notes-empty');if(empty)empty.hidden=count>0;
     this.updateResume();
+  }
+  ensureSearchIndex(){
+    if(this.searchIndex||this.indexPending)return;
+    this.indexPending=true;this.applyFilter();
+    return Promise.all(this.posts.map(async post=>{
+      try{
+        const response=await fetch(this.href(post),{credentials:'same-origin'});
+        if(!response.ok)throw new Error(`HTTP ${response.status}`);
+        const doc=new DOMParser().parseFromString(await response.text(),'text/html');
+        const body=(doc.querySelector('.article')?.textContent||'').replace(/\\s+/g,' ').toLocaleLowerCase('zh-CN');
+        return [post.slug,body];
+      }catch{return [post.slug,''];}
+    })).then(results=>{
+      this.searchIndex=new Map(results);this.indexFailures=results.filter(([,body])=>!body).length;this.indexPending=false;this.applyFilter();
+    }).catch(()=>{this.searchIndex=new Map();this.indexFailures=this.posts.length;this.indexPending=false;this.applyFilter();});
   }
   updateResume(){
     const recent=this.posts.map(post=>({post,saved:this.history[post.slug]})).filter(item=>item.saved?.progress>.03&&item.saved.progress<.96).sort((a,b)=>b.saved.updatedAt-a.saved.updatedAt)[0];
@@ -90,6 +133,26 @@ export class StoryLandscape {
     const trail=document.createElement('nav');trail.className='article-trail';trail.setAttribute('aria-label','笔记目录与阅读进度');trail.style.setProperty('--story-color',map?.color||'#a1f9d5');
     trail.innerHTML=`<div class="article-trail-head"><a href="${this.libraryHref()}">← 研究笔记</a><span>${escapeHTML(map?.region||post.tags[0])} / ${escapeHTML(map?.label||post.title)}</span><output class="article-read-percent">0%</output></div><div class="article-read-track"><i></i></div><div class="article-chapters">${this.headings.map((heading,index)=>`<a href="#${escapeHTML(heading.id)}"><span>${String(index+1).padStart(2,'0')}</span>${escapeHTML(heading.textContent)}</a>`).join('')}</div>`;
     hero.appendChild(trail);this.trail=trail;
+    const share=document.createElement('div');share.className='article-share';share.setAttribute('aria-label','分享文章');
+    share.innerHTML='<button type="button" data-share-copy>复制链接</button><button type="button" data-share-native hidden>分享</button><span role="status" aria-live="polite"></span>';
+    const nativeButton=share.querySelector('[data-share-native]');nativeButton.hidden=typeof navigator.share!=='function';
+    share.addEventListener('click',async event=>{
+      const copyButton=event.target.closest('[data-share-copy]');
+      const native=event.target.closest('[data-share-native]');
+      const shareUrl=new URL(`posts/${post.slug}/`,'https://captwd.github.io/').href;
+      const status=share.querySelector('[role="status"]');
+      if(copyButton){
+        try{await navigator.clipboard.writeText(shareUrl);status.textContent='链接已复制';}
+        catch{
+          const field=document.createElement('textarea');field.value=shareUrl;field.style.position='fixed';field.style.opacity='0';document.body.appendChild(field);field.select();
+          const copied=document.execCommand('copy');field.remove();status.textContent=copied?'链接已复制':'复制失败，请手动复制文章地址';
+        }
+        window.setTimeout(()=>{if(status.isConnected)status.textContent='';},2200);
+      }else if(native){
+        try{await navigator.share({title:post.title,text:post.excerpt,url:shareUrl});}catch(error){if(error?.name!=='AbortError')status.textContent='暂时无法分享';}
+      }
+    });
+    hero.appendChild(share);
     const returnToPeak=document.createElement('a');returnToPeak.className='article-scene-link';returnToPeak.href=`${this.root.href}#story-${post.slug}`;returnToPeak.textContent='在声音山脉里，定位这篇笔记 ↗';trail.appendChild(returnToPeak);
     this.journey.mount(post);
     const siblings=this.posts.filter(item=>item.slug!==post.slug).sort((a,b)=>Number(b.landscape?.region===map?.region)-Number(a.landscape?.region===map?.region)).slice(0,2);

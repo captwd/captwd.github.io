@@ -1,0 +1,32 @@
+<svg viewBox="0 0 940 330" xmlns="http://www.w3.org/2000/svg">
+  <!-- forward nodes -->
+  <g font-size="12.5">
+    <rect x="30" y="60" width="110" height="42" rx="7" fill="#e8f4ee" stroke="#1e7a55"/><text x="85" y="78" text-anchor="middle">z（噪声）</text><text x="85" y="95" text-anchor="middle" fill="#666" font-size="11">requires_grad=False</text>
+    <rect x="30" y="140" width="110" height="42" rx="7" fill="#e8f4ee" stroke="#1e7a55"/><text x="85" y="158" text-anchor="middle">mu_y（条件）</text><text x="85" y="175" text-anchor="middle" fill="#666" font-size="11">来自 encoder</text>
+    <rect x="30" y="220" width="110" height="42" rx="7" fill="#e8f4ee" stroke="#1e7a55"/><text x="85" y="238" text-anchor="middle">t（时间步）</text><text x="85" y="255" text-anchor="middle" fill="#666" font-size="11">张量 leaf</text>
+
+    <rect x="215" y="105" width="200" height="120" rx="10" fill="#1e7a55"/>
+    <text x="315" y="132" text-anchor="middle" fill="#fff" font-weight="bold">estimator 前向图</text>
+    <text x="315" y="154" text-anchor="middle" fill="#d8ede4" font-size="11">ConvNeXt 单元 ×N + Transformer</text>
+    <text x="315" y="174" text-anchor="middle" fill="#d8ede4" font-size="11">每个算子 = 图上一个节点</text>
+    <text x="315" y="200" text-anchor="middle" fill="#ffd9a0" font-size="11">节点间挂着的中间结果 = 激活（显存大头）</text>
+
+    <rect x="480" y="135" width="120" height="42" rx="7" fill="#e8f4ee" stroke="#1e7a55"/><text x="540" y="153" text-anchor="middle">v_pred (B,80,T)</text><text x="540" y="170" text-anchor="middle" fill="#666" font-size="11">速度场预测</text>
+
+    <rect x="660" y="135" width="110" height="42" rx="7" fill="#fdf3e7" stroke="#b7791f"/><text x="715" y="153" text-anchor="middle">MSE(·, u)</text><text x="715" y="170" text-anchor="middle" fill="#666" font-size="11">÷ 有效帧×通道</text>
+
+    <rect x="820" y="135" width="100" height="42" rx="7" fill="#c0392b"/><text x="870" y="161" text-anchor="middle" fill="#fff">loss（标量）</text>
+  </g>
+  <g stroke="#1e7a55" stroke-width="1.8" fill="none" marker-end="url(#ar)">
+    <line x1="140" y1="81" x2="212" y2="120"/><line x1="140" y1="161" x2="212" y2="161"/>
+    <line x1="140" y1="241" x2="212" y2="200"/><line x1="415" y1="165" x2="477" y2="156"/>
+    <line x1="600" y1="156" x2="657" y2="156"/><line x1="770" y1="156" x2="817" y2="156"/>
+  </g>
+
+  <!-- backward -->
+  <g font-size="12" fill="#c0392b">
+    <path d="M 870 182 C 870 290 300 300 315 228" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6 4"/>
+    <text x="575" y="292" text-anchor="middle" font-size="13" fill="#c0392b" font-weight="bold">backward()：沿图反向传播 → 每个 Parameter 的 .grad 被“+=”累加</text>
+    <text x="575" y="312" text-anchor="middle" font-size="11.5">AccumulateGrad 节点写叶子；走完后图与激活全部释放 → 梯度累积 = 不清零 .grad 多跑几个微批次</text>
+  </g>
+</svg>

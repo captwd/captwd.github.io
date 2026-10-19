@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大 · captwd</title>
+  <meta name="description" content="CPU、内存、磁盘、GPU 的物理结构与延迟金字塔：理解深度学习训练瓶颈的硬件视角。">
+  <link rel="canonical" href="https://captwd.github.io/posts/dl-hardware-primer/">
+  <meta property="og:type" content="article"><meta property="og:site_name" content="captwd · 波形笔记"><meta property="og:title" content="硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大 · captwd"><meta property="og:description" content="CPU、内存、磁盘、GPU 的物理结构与延迟金字塔：理解深度学习训练瓶颈的硬件视角。"><meta property="og:url" content="https://captwd.github.io/posts/dl-hardware-primer/"><meta property="og:image" content="https://captwd.github.io/assets/share-card.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="article:published_time" content="2026-09-06">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大 · captwd"><meta name="twitter:description" content="CPU、内存、磁盘、GPU 的物理结构与延迟金字塔：理解深度学习训练瓶颈的硬件视角。"><meta name="twitter:image" content="https://captwd.github.io/assets/share-card.png">
+  <link rel="alternate" type="application/rss+xml" title="captwd · 波形笔记 RSS" href="https://captwd.github.io/rss.xml"><link rel="alternate" type="application/atom+xml" title="captwd · 波形笔记 Atom" href="https://captwd.github.io/atom.xml">
+  <link rel="stylesheet" href="../../css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+  <div class="bg-wrap">
+    <canvas id="bg" data-mode="ambient"></canvas>
+    <div class="bg-fallback"></div>
+  </div>
+  <div class="bg-veil"></div>
+
+  <header class="site-head">
+    <a class="brand" href="../../">
+      <span class="brand-dot"></span>
+      <span class="brand-name">captwd</span>
+      <span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+    </a>
+    <nav class="site-nav">
+      <a href="../../">首页</a>
+      <a href="../../posts/about-this-blog/">关于</a>
+      <a href="https://github.com/captwd" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="article-hero"><div class="card-tags"><span class="card-tag">硬件</span><span class="card-tag">GPU</span><span class="card-tag">性能优化</span><span class="card-tag">科普</span></div><h1>硬件原理入门：为什么深度学习让 CPU、内存、磁盘、GPU 的特性被放大</h1><div class="article-meta">2026-09-06 · captwd</div></section>
+
+  <div class="article-wrap">
+    <article class="article"><blockquote>
+<p><strong>系列 · Matcha-TTS 训练手记</strong> ｜ <a href="/notes/#journal">目录</a> ｜ 上一篇：<a href="/posts/matcha-tts-windows-training-pitfalls/">Windows 从零训练踩坑全集</a> ｜ 下一篇：<a href="/posts/what-cpu-gpu-memory-do-during-training/">训练时硬件实况解读</a></p>
+</blockquote>
+<p>训练模型时，你会看到一堆数字：CPU 33%、GPU 46%、内存 85%、磁盘 2%。这些数字背后是一套物理结构在工作。这篇是一份”为深度学习而学”的硬件原理入门——不追踪某台机器的状态，只讲清 CPU、内存、磁盘、GPU 各自为什么长成这样，以及深度学习为什么把它们的特性放大。所有数字按典型消费级硬件给量级。</p>
+<h2 id="0-世界观：延迟金字塔"><a href="#0-世界观：延迟金字塔" class="headerlink" title="0. 世界观：延迟金字塔"></a>0. 世界观：延迟金字塔</h2><p>整台计算机的本质是<strong>一座为速度妥协容量的金字塔</strong>：每往下一层，容量大约 ×10<del>1000，但速度慢 ×10</del>10000。</p>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>延迟</th>
+<th>量级</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>寄存器</td>
+<td>~0.3ns</td>
+<td>字节级</td>
+</tr>
+<tr>
+<td>L1/L2 缓存</td>
+<td>1~10ns</td>
+<td>KB~MB</td>
+</tr>
+<tr>
+<td>L3 共享缓存</td>
+<td>10~40ns</td>
+<td>几十 MB</td>
+</tr>
+<tr>
+<td>内存 DRAM</td>
+<td>~100ns</td>
+<td>GB 级</td>
+</tr>
+<tr>
+<td>NVMe SSD</td>
+<td>~0.1ms</td>
+<td>TB 级</td>
+</tr>
+<tr>
+<td>机械硬盘</td>
+<td>~10ms</td>
+<td>TB 级</td>
+</tr>
+</tbody></table>
+<p>换个”人类时间标尺”（把 1 个 CPU 周期放大成 1 秒），差距会非常直观：L1 命中 ≈ 4 秒，L3 ≈ 40 秒，内存 ≈ 5 分钟，SSD ≈ <strong>3.5 天</strong>，机械盘寻道 ≈ <strong>9 个月</strong>，跨洋网络 ≈ <strong>14 年</strong>。</p>
+<p><strong>这就是一切优化故事的根源</strong>：深度学习里”数据搬运”的花费往往超过”计算”本身，因为数据住在这座金字塔的不同楼层。</p>
+<figure>
+  <img src="/img/hw-latency-pyramid.svg" alt="延迟金字塔" loading="lazy">
+  <figcaption>延迟金字塔：往下一层，容量约 ×10~1000，速度慢 ×10~10000</figcaption>
+</figure>
+
+<h2 id="1-CPU：一台专为”延迟”优化的机器"><a href="#1-CPU：一台专为”延迟”优化的机器" class="headerlink" title="1. CPU：一台专为”延迟”优化的机器"></a>1. CPU：一台专为”延迟”优化的机器</h2><h3 id="1-1-核心内部"><a href="#1-1-核心内部" class="headerlink" title="1.1 核心内部"></a>1.1 核心内部</h3><p>一个 CPU 核心是五段流水线：取指 → 解码 → 乱序调度 → 执行 → 写回，配套多级缓存：L1（32KB 指令 + 32KB 数据，每核私有，<del>4 周期）、L2（</del>1MB，<del>12 周期）、L3（几十 MB，全核共享，</del>40 周期）。</p>
+<p>关键概念：<strong>缓存行（cache line）64 字节，数据按整块搬运</strong>——这就是”顺序访问快、跳跃访问慢”的物理根源。CPU 设计的全部魔法，都是在”预测并提前把数据搬到楼上”。</p>
+<figure>
+  <img src="/img/hw-cpu-core.svg" alt="CPU 核心结构" loading="lazy">
+  <figcaption>CPU 核心：五段流水线 + 乱序执行 + 多级缓存（频率远不代表性能）</figcaption>
+</figure>
+
+<h3 id="1-2-四个决定性能的词"><a href="#1-2-四个决定性能的词" class="headerlink" title="1.2 四个决定性能的词"></a>1.2 四个决定性能的词</h3><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>原理</th>
+<th>对训练的含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>频率 GHz</td>
+<td>每秒时钟节拍；节拍 ≠ 完成一条指令</td>
+<td>笔记本会按温度/负载动态升降（throttling）</td>
+</tr>
+<tr>
+<td>IPC × 频率 × 核数</td>
+<td>性能三者缺一不可</td>
+<td>Python 循环 IPC 很低，主进程”忙”但产出少</td>
+</tr>
+<tr>
+<td>SMT 超线程</td>
+<td>一个物理核伪装成 2 个逻辑线程</td>
+<td>16 线程 = 8 物理核；33% 利用率 ≈ 5 线程真在干活</td>
+</tr>
+<tr>
+<td>SIMD 向量</td>
+<td>一条 AVX 指令处理 8~16 个浮点</td>
+<td>NumPy/torch 的 CPU 算子靠它加速</td>
+</tr>
+</tbody></table>
+<h3 id="1-3-“CPU-利用率-33-”-到底在量什么"><a href="#1-3-“CPU-利用率-33-”-到底在量什么" class="headerlink" title="1.3 “CPU 利用率 33%” 到底在量什么"></a>1.3 “CPU 利用率 33%” 到底在量什么</h3><p>操作系统每秒采样数百次，统计”<strong>有任务可跑的核心·时间 ÷ 总核心·时间</strong>“。所以 33% 的意思是：采样时刻平均只有 1/3 的核心有活干。它<strong>不衡量这些活的含金量</strong>（一个忙等循环也能 100%）。深度学习训练里 CPU 大部分等待来自：<strong>等 GPU 同步、等数据、等锁（GIL）</strong>。</p>
+<h2 id="2-内存：工作台与虚拟内存的戏法"><a href="#2-内存：工作台与虚拟内存的戏法" class="headerlink" title="2. 内存：工作台与虚拟内存的戏法"></a>2. 内存：工作台与虚拟内存的戏法</h2><h3 id="2-1-物理本质"><a href="#2-1-物理本质" class="headerlink" title="2.1 物理本质"></a>2.1 物理本质</h3><p>每比特是一个<strong>微型电容</strong>（有电=1，没电=0）。电容会漏电，所以每隔约 64ms 必须整行刷新——这就是”易失性”和断电丢数据的由来。带宽 = 频率 × 位宽 × 通道数（DDR5-5600 双通道 ≈ 89GB/s）。</p>
+<h3 id="2-2-虚拟内存"><a href="#2-2-虚拟内存" class="headerlink" title="2.2 虚拟内存"></a>2.2 虚拟内存</h3><p>程序看到的地址是假的：进程有独立的虚拟地址空间，MMU + TLB 负责翻译成物理地址。</p>
+<ul>
+<li>TLB 命中 → 翻译 ~1 周期</li>
+<li>TLB 未中 → 查页表（多次访存）</li>
+<li>缺页（Major）→ 读磁盘（ms 级）</li>
+</ul>
+<p><strong>换页（swap/pagefile）</strong>：内存吃紧时，系统把冷页写回磁盘腾地方——之后每次访问都慢 10⁵ 倍。”内存不足”的真实过程就是：分配失败/换页 → 冷页写盘 → 任务管理器里”已提交”飙升。</p>
+<figure>
+  <img src="/img/hw-virtual-memory.svg" alt="虚拟内存机制" loading="lazy">
+  <figcaption>虚拟内存：MMU + TLB 翻译、缺页异常、页缓存与换页</figcaption>
+</figure>
+
+<h3 id="2-3-页缓存：为什么第二次读文件几乎不花时间"><a href="#2-3-页缓存：为什么第二次读文件几乎不花时间" class="headerlink" title="2.3 页缓存：为什么第二次读文件几乎不花时间"></a>2.3 页缓存：为什么第二次读文件几乎不花时间</h3><p>OS 会把读写过的文件内容<strong>自动留在空闲内存</strong>里（Windows 叫 standby list，Linux 叫 page cache）。这是”空闲内存的聪明用法”，需要时立刻让位。数据集第一次读进内存后，之后每个 epoch 都是纯内存命中——这就是”读一次数据，整晚训练磁盘都退休”的原理。</p>
+<h3 id="2-4-锁页内存（pinned）"><a href="#2-4-锁页内存（pinned）" class="headerlink" title="2.4 锁页内存（pinned）"></a>2.4 锁页内存（pinned）</h3><p>普通内存可能被换出，DMA 引擎不敢直接拿它做异步拷贝（数据可能中途消失）。<strong>锁页内存 = 向 OS 承诺”绝不换出”</strong>，于是 GPU 的 DMA 可以安全异步直读。PyTorch 的 <code>pin_memory=True</code> 就是在干这个。代价是锁死的页会<strong>加剧</strong>内存压力（不能当缓存用），一把双刃剑。</p>
+<h2 id="3-磁盘：SSD-的”改写为什么这么麻烦”"><a href="#3-磁盘：SSD-的”改写为什么这么麻烦”" class="headerlink" title="3. 磁盘：SSD 的”改写为什么这么麻烦”"></a>3. 磁盘：SSD 的”改写为什么这么麻烦”</h2><h3 id="3-1-机械盘-vs-固态盘"><a href="#3-1-机械盘-vs-固态盘" class="headerlink" title="3.1 机械盘 vs 固态盘"></a>3.1 机械盘 vs 固态盘</h3><table>
+<thead>
+<tr>
+<th></th>
+<th>HDD</th>
+<th>SSD</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>介质</td>
+<td>磁性盘片 + 磁头机械寻道</td>
+<td>NAND 闪存（电子囚禁在浮栅）</td>
+</tr>
+<tr>
+<td>随机访问</td>
+<td>5~10ms（机械运动！）</td>
+<td>0.02~0.1ms</td>
+</tr>
+<tr>
+<td>顺序带宽</td>
+<td>150~250MB/s（SATA）</td>
+<td>NVMe 2~7GB/s</td>
+</tr>
+<tr>
+<td>寿命</td>
+<td>机械磨损</td>
+<td>每单元擦写次数有限（TLC ~1000-3000 次）</td>
+</tr>
+</tbody></table>
+<h3 id="3-2-NAND-的两个别扭特性（SSD-一切怪行为的根源）"><a href="#3-2-NAND-的两个别扭特性（SSD-一切怪行为的根源）" class="headerlink" title="3.2 NAND 的两个别扭特性（SSD 一切怪行为的根源）"></a>3.2 NAND 的两个别扭特性（SSD 一切怪行为的根源）</h3><ol>
+<li><strong>读/写按”页”（4~16KB）</strong></li>
+<li><strong>擦除按”块”（= 几百个页一起）</strong></li>
+</ol>
+<p>同一页要写第二次，必须先擦掉整个块。于是 SSD 内部有个”翻译官” <strong>FTL（闪存转换层）</strong>：</p>
+<pre><code>你改写 4KB → 不敢原地擦（要拖上几百页）   → 把新数据写到别的空页，改映射表   → 旧页标记垃圾，攒多了后台回收（GC）   → 副作用：写入放大（实际写 &gt; 你写的）、掉速   → 磨损均衡：FTL 故意把擦写摊到全盘所有块 </code></pre>
+
+<p>“SSD 写多了变慢”和”寿命”都源于此。</p>
+<figure>
+  <img src="/img/hw-nand-ftl.svg" alt="NAND 页块模型与 FTL" loading="lazy">
+  <figcaption>NAND 的页/块模型与 FTL：写入放大、垃圾回收与磨损均衡的根源</figcaption>
+</figure>
+
+<h3 id="3-3-NVMe-比-SATA-快在哪"><a href="#3-3-NVMe-比-SATA-快在哪" class="headerlink" title="3.3 NVMe 比 SATA 快在哪"></a>3.3 NVMe 比 SATA 快在哪</h3><p>SATA/AHCI 只有 <strong>1 条命令队列、深度 32</strong>；NVMe 走 PCIe 直连，支持 <strong>64000 条队列、每条 64000 深</strong>——并行度差三个数量级。训练的启示：checkpoint 是大块顺序写（NVMe 强项）；数据集尽量顺序大块读，别每条样本一次小 IO。</p>
+<h2 id="4-GPU：一台专为”吞吐量”优化的机器"><a href="#4-GPU：一台专为”吞吐量”优化的机器" class="headerlink" title="4. GPU：一台专为”吞吐量”优化的机器"></a>4. GPU：一台专为”吞吐量”优化的机器</h2><h3 id="4-1-哲学差异"><a href="#4-1-哲学差异" class="headerlink" title="4.1 哲学差异"></a>4.1 哲学差异</h3><table>
+<thead>
+<tr>
+<th></th>
+<th>CPU（4 个教授）</th>
+<th>GPU（一个礼堂的学生）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>核心</td>
+<td>少量超强核心、乱序、分支预测、大缓存</td>
+<td>几千个简单核心</td>
+</tr>
+<tr>
+<td>目标</td>
+<td>单任务<strong>延迟</strong>最小</td>
+<td>总<strong>吞吐量</strong>最大</td>
+</tr>
+<tr>
+<td>擅长</td>
+<td>复杂逻辑、分支、串行依赖</td>
+<td>海量同构小计算（矩阵乘法！）</td>
+</tr>
+<tr>
+<td>弱点</td>
+<td>并行任务多时启动开销高</td>
+<td>分支发散即空转</td>
+</tr>
+</tbody></table>
+<p>神经网络训练 = 巨量矩阵乘 = GPU 主场；Python 循环、数据整理 = CPU 主场。</p>
+<figure>
+  <img src="/img/hw-cpu-vs-gpu.svg" alt="CPU vs GPU" loading="lazy">
+  <figcaption>CPU（延迟优化）vs GPU（吞吐优化）</figcaption>
+</figure>
+
+<h3 id="4-2-SM、warp-与延迟隐藏"><a href="#4-2-SM、warp-与延迟隐藏" class="headerlink" title="4.2 SM、warp 与延迟隐藏"></a>4.2 SM、warp 与延迟隐藏</h3><p>GPU 的最小调度单位是 <strong>warp（32 个线程绑在一起，SIMT）</strong>。每个 SM 同时驻留几十个 warp；当一个 warp 在等显存数据（几百周期）时，调度器<strong>立刻切到另一个就绪 warp</strong> 继续算——用海量切换把访存延迟藏起来，这叫<strong>延迟隐藏</strong>，是 GPU 编程的灵魂。</p>
+<p>推论：如果驻留的 warp 太少（<strong>occupancy 低</strong>，比如 batch 只有 32），没有”备胎 warp”可切，GPU 只能干等 → 利用率低。这就是”小 batch 喂不饱 GPU”的架构层解释。</p>
+<p>显存侧同样分层：寄存器 → 共享内存/L1 → L2 → GDDR/HBM（~300+GB/s，几百周期）。访存连续（coalesced）时带宽才能打满——张量的内存布局之所以重要就在这。</p>
+<h3 id="4-3-拷贝引擎：让”搬家”和”计算”同时进行"><a href="#4-3-拷贝引擎：让”搬家”和”计算”同时进行" class="headerlink" title="4.3 拷贝引擎：让”搬家”和”计算”同时进行"></a>4.3 拷贝引擎：让”搬家”和”计算”同时进行</h3><p>GPU 里有独立的 <strong>DMA 拷贝引擎</strong>，所以”上一批在算”和”下一批在拷”可以并行——这就是数据预取（prefetch）能提高 GPU 利用率的硬件基础。前提：源内存必须 pinned。</p>
+<h2 id="5-串起来：一次-H2D-拷贝的完整旅程"><a href="#5-串起来：一次-H2D-拷贝的完整旅程" class="headerlink" title="5. 串起来：一次 H2D 拷贝的完整旅程"></a>5. 串起来：一次 H2D 拷贝的完整旅程</h2><p>以 <code>batch.to(device)</code> 这一行为例：</p>
+<pre><code>① Python 调用 ② PyTorch C++ 层把张量指针交给驱动 ③ 驱动向 GPU 拷贝引擎提交 DMA 命令 ④ PCIe 传输（数据须来自 pinned 页，否则先要 CPU 搬运 staging） ⑤ 拷贝完成触发中断 ⑥ 驱动通知 CUDA 流"事件完成" ⑦ 同流里的后续 kernel 才开始执行 </code></pre>
+
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>参与硬件</th>
+<th>典型耗时</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>命令提交</td>
+<td>CPU + 系统调用 + 驱动</td>
+<td>~10µs 级（每次发射的固定开销）</td>
+</tr>
+<tr>
+<td>PCIe 传输</td>
+<td>DMA 引擎 + PCIe</td>
+<td>毫秒级（几 MB ÷ 16GB/s）</td>
+</tr>
+<tr>
+<td>kernel 计算</td>
+<td>SM 阵列</td>
+<td>视模型，毫秒~几十毫秒</td>
+</tr>
+</tbody></table>
+<p><strong>全局图景</strong>：训练就是在”延迟阶梯”上反复搬数据，同时让 GPU 的吞吐机器别停。你做过的每个优化都能在这张地图上找到坐标——<strong>把数据搬到离计算最近的一层，或者让搬运与计算重叠</strong>。</p>
+<h2 id="6-继续深入"><a href="#6-继续深入" class="headerlink" title="6. 继续深入"></a>6. 继续深入</h2><table>
+<thead>
+<tr>
+<th>资源</th>
+<th>学什么</th>
+<th>难度</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>《深入理解计算机系统》第 1/5/6/9 章</td>
+<td>缓存、虚拟内存、链接、系统级 IO</td>
+<td>★★</td>
+</tr>
+<tr>
+<td>CMU 15-213 公开课</td>
+<td>CSAPP 配套，Lab 质量极高</td>
+<td>★★</td>
+</tr>
+<tr>
+<td>《What Every Programmer Should Know About Memory》</td>
+<td>内存子系统最深度长文</td>
+<td>★★★★</td>
+</tr>
+<tr>
+<td>《Programming Massively Parallel Processors》第 4 版</td>
+<td>GPU 架构与 CUDA 圣经</td>
+<td>★★★</td>
+</tr>
+<tr>
+<td>CUDA C++ Programming Guide 第 2 章 + Best Practices</td>
+<td>kernel、流、拷贝引擎</td>
+<td>★★★</td>
+</tr>
+</tbody></table>
+</article>
+  </div>
+
+  <footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+
+  <div id="audio-ui" aria-label="声源选择"></div>
+
+  <script src="../../js/transition.js"></script>
+  <script type="module" src="../../js/wave.js"></script>
+</body>
+</html>

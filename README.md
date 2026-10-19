@@ -103,6 +103,12 @@
 - `js/posts.js`、`posts/`：原有文章内容。
 - `js/transition.js`：保留页面碎片切换，置换后通过 `blog:navigate` 重绑交互。
 
+### 研究笔记发现与订阅
+
+研究笔记按日期从新到旧显示。搜索框会在首次输入关键词时读取站内文章正文并在浏览器本地建立索引；年份与主题筛选可以组合。文章页提供复制链接，并在浏览器支持时显示原生分享按钮。
+
+RSS 与 Atom 订阅源、站点地图和 `robots.txt` 由 `npm run generate:site-data` 从 `js/posts.js` 生成。新增文章后运行此命令并提交生成的 `rss.xml`、`atom.xml`、`sitemap.xml` 与 `robots.txt`。站点规范域名为 `https://captwd.github.io/`。
+
 ## 边界与降级
 
 波形对立体声显示第一声道，播放、时间拉伸和导出保留原声道数。波形与频谱为显示而降采样；拉伸后的画面按时间映射原始包络，并非逐采样重绘 WSOLA 输出。WSOLA 不是神经语音模型，复杂片段在大倍率下可能出现处理痕迹。

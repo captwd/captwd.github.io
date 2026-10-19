@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>研究笔记 · captwd</title><meta name="description" content="关于语音合成、生成模型与深度学习的研究笔记。">
+  <link rel="canonical" href="https://captwd.github.io/notes/">
+  <meta property="og:type" content="website"><meta property="og:site_name" content="captwd · 波形笔记"><meta property="og:title" content="研究笔记 · captwd"><meta property="og:description" content="关于语音合成、生成模型与深度学习的研究笔记。"><meta property="og:url" content="https://captwd.github.io/notes/"><meta property="og:image" content="https://captwd.github.io/assets/share-card.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="研究笔记 · captwd"><meta name="twitter:description" content="关于语音合成、生成模型与深度学习的研究笔记。"><meta name="twitter:image" content="https://captwd.github.io/assets/share-card.png">
+  <link rel="alternate" type="application/rss+xml" title="captwd · 波形笔记 RSS" href="https://captwd.github.io/rss.xml"><link rel="alternate" type="application/atom+xml" title="captwd · 波形笔记 Atom" href="https://captwd.github.io/atom.xml">
   <link rel="stylesheet" href="../css/style.css">
   <script type="importmap">{"imports":{"three":"../vendor/three/build/three.module.min.js","three/addons/":"../vendor/three/examples/jsm/"}}</script>
 </head>
@@ -11,12 +15,34 @@
   <header class="site-head"><a class="brand" href="../"><span class="brand-dot"></span><span class="brand-name">captwd<span class="brand-slash"> / </span>波形笔记</span></a><nav class="site-nav"><a href="../">声音山脉 ↗</a><a href="./" data-notes-nav aria-current="page">研究笔记</a><a href="../posts/about-this-blog/">关于</a><a href="https://github.com/captwd" target="_blank" rel="noopener">GitHub ↗</a></nav></header>
   <section class="hero notes-hero">
     <div><div class="hero-kicker"><i></i> FIELD NOTES / RESEARCH JOURNAL</div><h1>在声音与<br><span>模型之间。</span></h1></div>
-    <div class="notes-intro"><p>关于语音合成、生成模型，<br>和那些值得记下来的实验。</p><a href="../">回到声音山脉 <span>↗</span></a></div>
+    <aside class="notes-intro notes-author-card" aria-label="作者介绍">
+      <div class="author-card-head">
+        <span class="author-wave-avatar" aria-hidden="true">
+          <svg viewBox="0 0 48 48" focusable="false"><path d="M5 25h5l3-10 5 20 5-27 5 31 5-23 4 13 3-7h8" /></svg>
+        </span>
+        <div><span class="author-card-kicker">AUTHOR / SOUND &amp; MODEL</span><h2>captwd</h2></div>
+      </div>
+      <p class="author-bio">关注语音合成、生成模型与声音交互，记录实验与思考。</p>
+      <div class="author-topics" aria-label="关注方向"><span>语音合成</span><span>生成模型</span><span>声音交互</span></div>
+      <div class="author-card-meta" aria-label="笔记统计">
+        <span><strong data-author-post-count>0</strong> 篇笔记</span>
+        <span>最近更新 <time data-author-latest-date>—</time></span>
+      </div>
+      <a class="author-github" href="https://github.com/captwd" target="_blank" rel="noopener noreferrer" aria-label="在新窗口打开 captwd 的 GitHub 主页">GitHub <span aria-hidden="true">↗</span></a>
+    </aside>
   </section>
   <main class="content notes-library" id="journal">
     <div class="journal-heading"><h2>研究笔记</h2><span class="journal-topic"></span></div>
     <div class="notes-resume"><a class="reading-resume" hidden></a></div>
+    <nav class="journal-filters" id="notes-topics" role="group" aria-label="按主题筛选研究笔记"></nav>
+    <div class="journal-tools">
+      <label class="notes-search" for="notes-search"><span aria-hidden="true">⌕</span><input id="notes-search" type="search" aria-label="搜索文章标题、摘要、标签与正文" placeholder="搜索标题、正文或主题…" autocomplete="off"><span class="search-shortcut">全文</span></label>
+      <label class="notes-year-label" for="notes-year">年份<select id="notes-year"><option value="全部">全部年份</option></select></label>
+      <nav class="notes-feeds" aria-label="订阅研究笔记"><span>订阅</span><a href="../rss.xml">RSS</a><a href="../atom.xml">Atom</a></nav>
+    </div>
     <div class="card-grid" id="post-grid"></div>
+    <p id="notes-results-status" role="status" aria-live="polite">正在整理研究笔记…</p>
+    <p id="notes-empty" hidden>没有找到相关笔记，试试其他关键词或筛选条件。</p>
   </main>
   <footer class="site-foot"><span>© 2026 captwd · 波形笔记</span><span>THOUGHTS, WRITTEN DOWN.</span></footer>
   <script src="../js/posts.js"></script><script src="../js/site.js"></script><div id="audio-ui" aria-label="声音播放器"></div><script src="../js/transition.js"></script><script type="module" src="../js/wave.js"></script>

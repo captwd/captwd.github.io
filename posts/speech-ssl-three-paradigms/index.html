@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>掩码预测的副产品：自监督语音表征为什么&quot;接个头就能用&quot; · captwd</title>
+  <meta name="description" content="语音自监督的三种范式（对比学习 / 离线伪标签 / 在线 EMA 回归）统一拆解：EMA 教师到底是不是&quot;另一个模型&quot;、为什么不回传梯度、decay 为什么要退火，以及掩码预测学到的表征为什么接一个线性头就能做情感分类。">
+  <link rel="canonical" href="https://captwd.github.io/posts/speech-ssl-three-paradigms/">
+  <meta property="og:type" content="article"><meta property="og:site_name" content="captwd · 波形笔记"><meta property="og:title" content="掩码预测的副产品：自监督语音表征为什么&quot;接个头就能用&quot; · captwd"><meta property="og:description" content="语音自监督的三种范式（对比学习 / 离线伪标签 / 在线 EMA 回归）统一拆解：EMA 教师到底是不是&quot;另一个模型&quot;、为什么不回传梯度、decay 为什么要退火，以及掩码预测学到的表征为什么接一个线性头就能做情感分类。"><meta property="og:url" content="https://captwd.github.io/posts/speech-ssl-three-paradigms/"><meta property="og:image" content="https://captwd.github.io/assets/share-card.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="article:published_time" content="2026-09-19">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="掩码预测的副产品：自监督语音表征为什么&quot;接个头就能用&quot; · captwd"><meta name="twitter:description" content="语音自监督的三种范式（对比学习 / 离线伪标签 / 在线 EMA 回归）统一拆解：EMA 教师到底是不是&quot;另一个模型&quot;、为什么不回传梯度、decay 为什么要退火，以及掩码预测学到的表征为什么接一个线性头就能做情感分类。"><meta name="twitter:image" content="https://captwd.github.io/assets/share-card.png">
+  <link rel="alternate" type="application/rss+xml" title="captwd · 波形笔记 RSS" href="https://captwd.github.io/rss.xml"><link rel="alternate" type="application/atom+xml" title="captwd · 波形笔记 Atom" href="https://captwd.github.io/atom.xml">
+  <link rel="stylesheet" href="../../css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+  <div class="bg-wrap">
+    <canvas id="bg" data-mode="ambient"></canvas>
+    <div class="bg-fallback"></div>
+  </div>
+  <div class="bg-veil"></div>
+
+  <header class="site-head">
+    <a class="brand" href="../../">
+      <span class="brand-dot"></span>
+      <span class="brand-name">captwd</span>
+      <span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+    </a>
+    <nav class="site-nav">
+      <a href="../../">首页</a>
+      <a href="../../posts/about-this-blog/">关于</a>
+      <a href="https://github.com/captwd" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="article-hero"><div class="card-tags"><span class="card-tag">自监督学习</span><span class="card-tag">语音</span><span class="card-tag">emotion2vec</span><span class="card-tag">wav2vec2</span><span class="card-tag">学习笔记</span></div><h1>掩码预测的副产品：自监督语音表征为什么&quot;接个头就能用&quot;</h1><div class="article-meta">2026-09-19 · captwd</div></section>
+
+  <div class="article-wrap">
+    <article class="article"><blockquote>
+<p>「语音模型学习笔记」系列：<a href="/posts/cfm-velocity-field-notes/">① 速度场</a> ｜ <a href="/posts/conditions-and-cfg-in-cfm/">② 条件与 CFG</a> ｜ <a href="/posts/speech-ssl-three-paradigms/">③ 自监督表征</a> ｜ <a href="/posts/alignment-ctc-transducer-aed-mas/">④ 对齐四范式</a> ｜ <a href="/posts/metrics-three-layers/">⑤ 指标的三个层次</a></p>
+</blockquote>
+<p>emotion2vec 这类自监督模型有个乍看矛盾的现象：预训练时的任务只是”预测被掩码的片段”，既没见过任何情感标签，为什么预训练完，接一个两层 MLP 就能做情感识别？这篇的答案分三步：掩码预测到底在逼模型学什么（代理任务的哲学）、三种自监督范式各自的实现、以及”小头读出”为什么会成立。</p>
+<h2 id="预测是代理任务，表征才是副产品"><a href="#预测是代理任务，表征才是副产品" class="headerlink" title="预测是代理任务，表征才是副产品"></a>预测是代理任务，表征才是副产品</h2><p>先纠正一个直觉：模型要学的从来不是”预测被掩码片段”这件事本身，而是”<strong>为了让被掩片段变得可预测，中间表征必须编码哪些信息</strong>“。</p>
+<p>一段被掩掉的 20ms 音频由什么决定？协同发音、说话人音色、语速语调、情绪状态（愤怒的元音和悲伤的元音频谱结构完全不同）、录音环境。模型没法预知哪个因素对预测贡献大，梯度会把所有决定因素都压进特征里——掩码预测本质上是在逼模型学一个”语音声学的世界模型”。预测是代理任务（pretext task），表征是副产品。</p>
+<p>情感的特别之处在于它不是表面细节，而是<strong>决定语音如何被实现的高层生成因子</strong>：同一个”好”字，愤怒版和悲伤版在音高轨迹、能量包络、时长分布上系统性不同。一个足够好的语音表征，不可能不编码情感——否则它连被掩片段都预测不准。</p>
+<h2 id="EMA-教师是”另一个模型”吗"><a href="#EMA-教师是”另一个模型”吗" class="headerlink" title="EMA 教师是”另一个模型”吗"></a>EMA 教师是”另一个模型”吗</h2><p>data2vec / emotion2vec 这一系的训练里有个”教师模型”，容易误解成知识蒸馏里那种独立的大模型。它不是：<strong>结构上是同一个网络实例化了两次，参数上是两套独立张量，生命周期上只在预训练期间存在</strong>。四个问题说清：</p>
+<ul>
+<li><strong>它怎么来的</strong>：从学生深拷贝起步（第 0 步权重完全相同），之后只按 <code>θ_T ← m·θ_T + (1−m)·θ_S</code> 被动地追学生，从不被优化器更新。m=0.999 相当于最近约 1000 步学生权重的滑动平均——一个”慢动作版的学生”，时间维度上的集成。</li>
+<li><strong>为什么不回传梯度</strong>：教师是出题人/答案册。答案册若参与优化，模型发现把答案往自己的预测上拉就能降损失——预测和目标互相奔赴，损失归零，什么都没学到，这就是自蒸馏的<strong>坍缩</strong>。所以规矩单向：梯度只更新学生，教师只被 EMA 拖着走。即便如此仍有残余风险（教师是学生的平均，平均久了也可能一起缩到零），所以配方差正则（<code>min_target_var: 0.1</code> / <code>min_pred_var: 0.01</code>）硬性保证输出不塌成常数——EMA 加方差正则，两道保险缺一不可。</li>
+<li><strong>为什么教师看完整序列、学生只看未掩码部分</strong>：学生拿掩码输入猜、教师拿完整序列答，训练信号才是”从局部线索推断全局表征”——和 BERT 完形填空同构，只不过答案是教师在那个位置的连续隐层，不是离散词。</li>
+<li><strong>为什么 decay 要退火</strong>（0.999 → 2 万步内 → 0.99999）：有效窗口从 ~1000 步拉长到 ~10 万步。前期教师必须”够得着”——目标太超前，预测误差里全是噪声；后期必须”稳得住”——教师还跟着晃，学生就在追移动靶。</li>
+</ul>
+<p>预训练结束，教师使命完成、直接丢弃；推理抽特征用的只有学生权重。</p>
+<h2 id="三种范式：负样本、伪标签与在线教师"><a href="#三种范式：负样本、伪标签与在线教师" class="headerlink" title="三种范式：负样本、伪标签与在线教师"></a>三种范式：负样本、伪标签与在线教师</h2><p>语音自监督按”预测目标是什么、从哪来”分成三派：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>目标</th>
+<th>目标来源</th>
+<th>损失</th>
+<th>防坍缩</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>wav2vec2</td>
+<td>离散码</td>
+<td>在线可学习量化器（Gumbel-softmax）</td>
+<td>对比：从负样本里挑出真码</td>
+<td>负样本天然抗坍缩</td>
+</tr>
+<tr>
+<td>HuBERT</td>
+<td>离散簇 ID</td>
+<td>离线 k-means，迭代两轮</td>
+<td>交叉熵（BERT 式掩码分类）</td>
+<td>目标固定不塌</td>
+</tr>
+<tr>
+<td>data2vec</td>
+<td>连续隐层向量</td>
+<td>在线 EMA 教师</td>
+<td>L1 回归</td>
+<td>EMA 单向 + 方差正则</td>
+</tr>
+</tbody></table>
+<p><strong>wav2vec2</strong>：对卷积前端输出的隐层特征做掩码，被掩位置用量化器映成离散码——量化器在模型内部、训练中在线学习，码本相当于模型自己”发现的音素表”。上下文网络的任务是从约 100 个负样本里认出被掩位置的真码（InfoNCE），外加码本多样性正则。学东西的方式是<strong>辨别</strong>，不是重建。</p>
+<p><strong>HuBERT</strong>：目标是<strong>离线</strong>的——先对 MFCC 特征跑 k-means（50 类）得到每帧的簇 ID，掩码后用交叉熵预测被掩帧的簇 ID；训完一轮，用新模型的第 9 层特征重新聚类（500 类，更细），重训。本质和 wav2vec2 相似（都在预测离散语音单元），区别只在目标离线还是在线。</p>
+<p><strong>data2vec</strong>：目标是<strong>连续</strong>的——EMA 教师对完整序列编码，取顶层 K=8 层、逐层 instance-norm 后平均作为回归目标，学生做 L1。无离散化、无负样本、无外部聚类管线，代价是要自己搭防坍缩的脚手架。</p>
+<h2 id="emotion2vec：换数据，不换目标"><a href="#emotion2vec：换数据，不换目标" class="headerlink" title="emotion2vec：换数据，不换目标"></a>emotion2vec：换数据，不换目标</h2><p>emotion2vec 直接沿用 data2vec 2.0 的多模态架构（只留音频模态）：卷积前端（7 层卷积，总步长 320，16kHz → 50Hz 帧率）→ prenet 4 层 → 主干 8 层 Transformer（768 维、12 头、ALiBi 位置偏置），句级特征 = 帧特征做时间平均。推理链路里没有掩码、没有教师——学生网络就是一个特征提取器。</p>
+<p>一个流传较广的误解需要澄清：<strong>emotion2vec 的情感偏向不是来自”把预测目标换成了情感单元做离散化”</strong>——它的预测目标和 data2vec 一样是连续的 EMA 教师隐层。情感的转向主要来自<strong>数据分布</strong>：预训练语料是大规模挖掘的 in-the-wild 情感语音（影视等），而不是 LibriSpeech 式朗读语音。数据分布决定表征往哪个方向压缩，这正是”预测目标是方向盘”的准确版本——对 emotion2vec 来说，方向盘主要是数据。</p>
+<p>这也解释了和 wav2vec2 的分工：wav2vec2 的量化目标类音素，表征偏音系学信息，微调成 ASR 只需一个线性层，但拿去做情感中等；emotion2vec 表征偏情感，做 SER 强，音素信息相对弱。<strong>架构相同，数据不同，表征的偏向就不同。</strong></p>
+<h2 id="为什么一个线性头就够"><a href="#为什么一个线性头就够" class="headerlink" title="为什么一个线性头就够"></a>为什么一个线性头就够</h2><p>接一个线性层（或两层 MLP）就能达到高精度，意味着标签信息在表征空间里已经<strong>近似线性可分</strong>——愤怒的样本聚在一块、悲伤的聚在另一块，一张超平面就能切开。这个现象不是音频特有的：BERT 对 GLUE 线性探针很准，CLIP 特征能零样本分类。Transformer 逐层混合信息后，高层语义倾向于落在线性子空间里——<strong>分类头是在读出一个已经存在的结构，不是在学习它</strong>。分工也由此清晰：预训练用百万小时级无标注数据、不带标签偏置，把表征学好；小头只承担”768 维 → 4 类”的最后一步，两万条标注就够训。</p>
+<p>最后一个反证，说明探针测的确实是”信息有无”：在 ESD 情感 TTS 实验里，用 emotion2vec 探针测合成音频的情感可辨识度只有 ~28.8%，而真实录音是 68.6%；用合成音频自训自测（域内探针）更是 20.2%，接近随机水平。表征本身没问题——是合成音频里情感信息真的不存在。探针的读数反映的是数据里有没有那个信息，不是探针头的能力。</p>
+<h2 id="尾注"><a href="#尾注" class="headerlink" title="尾注"></a>尾注</h2><p>表征学好之后，还剩最后一个根本困难没解决：音频几百上千帧、文本几十个字、帧级标注不存在——识别和合成怎么把两串序列对上？下一篇把 CTC、Transducer、AED 和 MAS 四种解法放进同一张图。→ <a href="/posts/alignment-ctc-transducer-aed-mas/">没有帧级标注，语音模型怎么活</a></p>
+</article>
+  </div>
+
+  <footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+
+  <div id="audio-ui" aria-label="声源选择"></div>
+
+  <script src="../../js/transition.js"></script>
+  <script type="module" src="../../js/wave.js"></script>
+</body>
+</html>

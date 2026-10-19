@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法 · captwd</title>
+  <meta name="description" content="第一次真正跑 F5-TTS 零样本克隆，从&quot;语速对不上&quot;一路想到&quot;给流匹配模型加解耦预测头&quot;。记一下这条链，以及我最后那个想法：用时长/音高/能量几个头预测出韵律，再当成条件塞给下游生成器。顺带记下数据层面的抓手——语速扰动增广，和 tempo/speed 那个坑。">
+  <link rel="canonical" href="https://captwd.github.io/posts/f5-tts-zero-shot-duration-and-decoupled-heads/">
+  <meta property="og:type" content="article"><meta property="og:site_name" content="captwd · 波形笔记"><meta property="og:title" content="F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法 · captwd"><meta property="og:description" content="第一次真正跑 F5-TTS 零样本克隆，从&quot;语速对不上&quot;一路想到&quot;给流匹配模型加解耦预测头&quot;。记一下这条链，以及我最后那个想法：用时长/音高/能量几个头预测出韵律，再当成条件塞给下游生成器。顺带记下数据层面的抓手——语速扰动增广，和 tempo/speed 那个坑。"><meta property="og:url" content="https://captwd.github.io/posts/f5-tts-zero-shot-duration-and-decoupled-heads/"><meta property="og:image" content="https://captwd.github.io/assets/share-card.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="article:published_time" content="2026-09-13">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法 · captwd"><meta name="twitter:description" content="第一次真正跑 F5-TTS 零样本克隆，从&quot;语速对不上&quot;一路想到&quot;给流匹配模型加解耦预测头&quot;。记一下这条链，以及我最后那个想法：用时长/音高/能量几个头预测出韵律，再当成条件塞给下游生成器。顺带记下数据层面的抓手——语速扰动增广，和 tempo/speed 那个坑。"><meta name="twitter:image" content="https://captwd.github.io/assets/share-card.png">
+  <link rel="alternate" type="application/rss+xml" title="captwd · 波形笔记 RSS" href="https://captwd.github.io/rss.xml"><link rel="alternate" type="application/atom+xml" title="captwd · 波形笔记 Atom" href="https://captwd.github.io/atom.xml">
+  <link rel="stylesheet" href="../../css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+  <div class="bg-wrap">
+    <canvas id="bg" data-mode="ambient"></canvas>
+    <div class="bg-fallback"></div>
+  </div>
+  <div class="bg-veil"></div>
+
+  <header class="site-head">
+    <a class="brand" href="../../">
+      <span class="brand-dot"></span>
+      <span class="brand-name">captwd</span>
+      <span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+    </a>
+    <nav class="site-nav">
+      <a href="../../">首页</a>
+      <a href="../../posts/about-this-blog/">关于</a>
+      <a href="https://github.com/captwd" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="article-hero"><div class="card-tags"><span class="card-tag">F5-TTS</span><span class="card-tag">流匹配</span><span class="card-tag">零样本TTS</span><span class="card-tag">时长控制</span><span class="card-tag">解耦</span><span class="card-tag">数据增广</span><span class="card-tag">研究想法</span></div><h1>F5-TTS 零样本的时长之困：从参考音频的坑，到&quot;解耦预测头&quot;的想法</h1><div class="article-meta">2026-09-13 · captwd</div></section>
+
+  <div class="article-wrap">
+    <article class="article"><blockquote>
+<p>相关：<a href="/posts/sway-sampling-for-flow-matching-tts/">Sway Sampling 实测</a> ｜ 代码：<a target="_blank" rel="noopener" href="https://github.com/SWivid/F5-TTS">F5-TTS</a> ｜ 论文：<a target="_blank" rel="noopener" href="https://arxiv.org/abs/2410.06885">arXiv 2410.06885</a></p>
+</blockquote>
+<p>今天第一次把 F5-TTS 真正跑起来，本来只是想克隆一个音色，结果被”语速太快”这件事绊住，然后顺着它一路想到模型结构。这篇把整条链记下来，<strong>重点放在最后那个解耦预测头的想法</strong>。</p>
+<h2 id="一、F5-TTS-是什么（一句话版）"><a href="#一、F5-TTS-是什么（一句话版）" class="headerlink" title="一、F5-TTS 是什么（一句话版）"></a>一、F5-TTS 是什么（一句话版）</h2><p>F5-TTS 是<strong>条件流匹配（CFM）+ DiT</strong> 的非自回归 TTS：</p>
+<ul>
+<li>训练：取真实 mel <code>x1</code> 和高斯噪声 <code>x0</code>，随机时刻 <code>t</code> 构造 <code>x_t=(1−t)x0+t·x1</code>，让网络预测直线速度 <code>v=x1−x0</code>，只对被 mask 的”待生成区”算 MSE。</li>
+<li>推理：从噪声出发，用 ODE 沿学到的速度场积分到 <code>t=1</code>，得到 mel。</li>
+<li>条件：把<strong>参考 mel 和文本一起拼进序列</strong>，参考区被”钉住”不动（in-context infilling）——这就是零样本声音克隆的来源。</li>
+<li>它刻意做得很简：<strong>没有 duration model、没有 text encoder、没有 phoneme alignment</strong>，也没有说话人编码器。</li>
+</ul>
+<p>这几条代码里都能对上：<code>cfm.py</code> 的 <code>forward</code> / <code>sample</code> 是训练和推理两个入口，<code>dit.py:202</code> 把 <code>[带噪mel | cond | 文本]</code> 三路拼成一个序列。</p>
+<h2 id="二、跑起来：参考音频、文本、时长的三角关系"><a href="#二、跑起来：参考音频、文本、时长的三角关系" class="headerlink" title="二、跑起来：参考音频、文本、时长的三角关系"></a>二、跑起来：参考音频、文本、时长的三角关系</h2><p>跑通了，但踩了两个坑，正好把问题暴露出来。</p>
+<h3 id="坑-1：参考音频被截断，但参考文本没截"><a href="#坑-1：参考音频被截断，但参考文本没截" class="headerlink" title="坑 1：参考音频被截断，但参考文本没截"></a>坑 1：参考音频被截断，但参考文本没截</h3><p><code>utils_infer.py:325</code> 会把超过 12s 的参考音频<strong>自动截短到 12s</strong>，但如果你给的 <code>ref_text</code> 是整段 23s 的转写，两者就对不上了。</p>
+<p>F5 的时长是这么估的（<code>utils_infer.py:503</code>）：</p>
+<pre><code>duration = ref_audio_len + int(ref_audio_len / ref_text_len * gen_text_len / local_speed) </code></pre>
+
+<p><code>ref_audio_len</code> 只有 12s 的帧数，<code>ref_text_len</code> 却是 23s 文本的长度 → 每字节对应帧数被低估约一半 → 生成只有应有长度的一半。<strong>11s 的文本生成了 5s，听起来飞快。</strong></p>
+<h3 id="坑-2：参考有停顿、文本又短，反而生成超长"><a href="#坑-2：参考有停顿、文本又短，反而生成超长" class="headerlink" title="坑 2：参考有停顿、文本又短，反而生成超长"></a>坑 2：参考有停顿、文本又短，反而生成超长</h3><p>换成另一段 10.14s 的参考，文本只有 16 字。一量发现：<strong>有效人声只有 6.9s，中间夹了 3.2s 停顿</strong>。模型按”10.14s / 16 字”估语速，于是 50 字的生成直接拖到 <strong>30.6s</strong>。</p>
+<p>这告诉我们一件很关键的事：</p>
+<blockquote>
+<p><strong>F5 的”语速”是从参考音频的 <code>帧数/文本长度</code> 反推出来的。</strong> 参考里有多少停顿、文本和音频对不对得上，会一比一地转移到生成结果上。</p>
+</blockquote>
+<p>短期只能补偿：<code>speed</code>（全局缩放）、<code>fix_duration</code>（直接给总时长）。但都是治标。</p>
+<h2 id="三、根因：F5-根本没有”时长建模”"><a href="#三、根因：F5-根本没有”时长建模”" class="headerlink" title="三、根因：F5 根本没有”时长建模”"></a>三、根因：F5 根本没有”时长建模”</h2><p>顺着上面往下想，会发现 F5 缺的不是某个参数，而是<strong>一个独立的”我该说多长”的机制</strong>。这里有三个容易混的”进度轴”：</p>
+<table>
+<thead>
+<tr>
+<th>轴</th>
+<th>含义</th>
+<th>在 F5 里</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>流时间 <code>t</code></td>
+<td>从噪声去噪到哪一步</td>
+<td><code>[0,1]</code>，本来就归一化；通过 <code>TimestepEmbedding</code> 注入</td>
+</tr>
+<tr>
+<td>位置</td>
+<td>生成到第几帧</td>
+<td>由 RoPE 编码（普通、未归一化）</td>
+</tr>
+<tr>
+<td>时长 / 任务进度</td>
+<td>这句话总共多长</td>
+<td><strong>没有显式建模</strong>，靠参考比例猜</td>
+</tr>
+</tbody></table>
+<ul>
+<li>把<strong>流时间 <code>t</code></strong> 再归一化 → 只是换采样时刻表，那就是 <strong>Sway Sampling</strong>（<code>cfm.py:263</code>），影响采样质量，不影响时长。</li>
+<li>把<strong>位置</strong>归一化 <code>i/L</code>，并把 <code>L</code> 暴露成可控输入 → 这正是 <strong>VoiceStar 的 PM-RoPE</strong>：用”完成百分之多少”取代绝对位置，从而实现时长控制 + 长音频外推。</li>
+</ul>
+<p>也就是说：<strong>想让 F5 更好控时长，该动的是”时长”，而不是 RoPE、也不是流时间 <code>t</code>。</strong></p>
+<h2 id="四、时长控制的三条路"><a href="#四、时长控制的三条路" class="headerlink" title="四、时长控制的三条路"></a>四、时长控制的三条路</h2><table>
+<thead>
+<tr>
+<th>层次</th>
+<th>做法</th>
+<th>成本</th>
+<th>粒度</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>免训练</td>
+<td>参考 VAD 剪停顿 + 准确转写 + <code>fix_duration</code> / <code>speed</code></td>
+<td>极低</td>
+<td>只能控总长</td>
+</tr>
+<tr>
+<td>工程改进</td>
+<td>用<strong>学出来的 duration predictor</strong> 替换比例启发式</td>
+<td>低</td>
+<td>整句时长</td>
+</tr>
+<tr>
+<td>研究级</td>
+<td>把时长/语速做成<strong>条件输入</strong> + 时长增强训练</td>
+<td>中</td>
+<td>整句→字级</td>
+</tr>
+</tbody></table>
+<p>这也是我后面那个想法的起点。</p>
+<h2 id="五、当前零样本-小样本-TTS-速览（2025–2026）"><a href="#五、当前零样本-小样本-TTS-速览（2025–2026）" class="headerlink" title="五、当前零样本 / 小样本 TTS 速览（2025–2026）"></a>五、当前零样本 / 小样本 TTS 速览（2025–2026）</h2><p>零样本这块这两年非常卷，但<strong>没有单一”最好”，看维度</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>架构</th>
+<th>强项</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>IndexTTS 2 / 2.5</td>
+<td>AR + FM</td>
+<td>时长/情感<strong>解耦</strong>，韵律可控</td>
+</tr>
+<tr>
+<td>CosyVoice 2 / 3</td>
+<td>AR LLM + FM</td>
+<td>流式低延迟、多语言、指令/标签控制</td>
+</tr>
+<tr>
+<td>MegaTTS 3</td>
+<td>Latent Diffusion</td>
+<td>音色相似、口音强度可控</td>
+</tr>
+<tr>
+<td>Seed-TTS / MiniMax</td>
+<td>AR/混合</td>
+<td>综合最强（多为闭源）</td>
+</tr>
+<tr>
+<td><strong>VoiceStar</strong></td>
+<td>AR</td>
+<td><strong>显式时长控制 + 长音频外推（PM-RoPE）</strong></td>
+</tr>
+<tr>
+<td>F5-TTS / E2-TTS</td>
+<td>NAR FM</td>
+<td>简洁、鲁棒、易训（我在用的）</td>
+</tr>
+</tbody></table>
+<p>小样本现在基本不”从零训练”了，而是**零样本 + 少量数据微调（LoRA/adapter）**做说话人适配。</p>
+<p>顺带一提：同组的 <strong>X-Voice</strong>（arXiv 2605.05611）直接<strong>在 F5-TTS 上扩展</strong>——多语言、免参考转写，还加了语言注入和<strong>解耦的 CFG</strong>。说明”给 F5 加可控性”这条线是有人在做、且认可的。</p>
+<h2 id="六、F5-没有解耦——这是空位"><a href="#六、F5-没有解耦——这是空位" class="headerlink" title="六、F5 没有解耦——这是空位"></a>六、F5 没有解耦——这是空位</h2><p>我在代码里确认了一遍：模型里没有 speaker / pitch / energy / variance 任何预测头。DiT 的输入只有 <code>cond</code>、文本、<code>t</code>，输出只有速度场；<code>trainer.py:154</code> 那个 <code>duration_predictor</code> 钩子注释明写”目前未启用训练”。</p>
+<p>后果就是：<strong>音色、内容、韵律、时长全部纠缠在同一份 in-context 表示里，无法独立控制</strong>。想”同音色、只改语速”，F5 做不到。</p>
+<p>这既是它目前不好控的原因，<strong>也正是最容易切入做改进的地方</strong>。</p>
+<h2 id="七、我的想法：解耦多预测头-→-条件化下游生成器"><a href="#七、我的想法：解耦多预测头-→-条件化下游生成器" class="headerlink" title="七、我的想法：解耦多预测头 → 条件化下游生成器"></a>七、我的想法：解耦多预测头 → 条件化下游生成器</h2><p>思路一句话：<strong>先解耦地预测出韵律（时长、音高、能量……），再把这些预测当成条件，塞给下游的流匹配生成器。</strong></p>
+<h3 id="1-架构"><a href="#1-架构" class="headerlink" title="1. 架构"></a>1. 架构</h3><pre><code>              ┌──────────────┐ text  ───────▶│  文本编码器   │──┐               └──────────────┘  │               ┌──────────────┐  │   ┌──────────────────────┐ ref   ───────▶│ 参考/风格编码 │──┼──▶│ 多个预测头            │               └──────────────┘  │   │ duration / F0 / energy│                                 │   │ (+ style/emotion)     │──▶ 条件向量                                 │   └──────────────────────┘                                 │              │                               文本             ▼（作为条件注入）                       ┌──────────────────────────────────┐                       │   流匹配生成器 (DiT / CFM)         │──▶ mel ──▶ vocoder                       └──────────────────────────────────┘ </code></pre>
+
+<p>它其实是把 F5 缺失的 <strong>duration model</strong> 补回来，并且顺便把 <strong>variance adaptor</strong>（FastSpeech 2 的时长/音高/能量预测器）搬进流匹配的零样本框架里。</p>
+<h3 id="2-训练-推理"><a href="#2-训练-推理" class="headerlink" title="2. 训练 / 推理"></a>2. 训练 / 推理</h3><ul>
+<li><strong>监督来源</strong>：时长用强制对齐（MFA / ctc-forced-aligner）得到帧级时长；F0 用 pyworld/parselmouth 提基频；能量用 RMS。<strong>每个头用真值监督。</strong></li>
+<li><strong>生成器</strong>：训练时用<strong>真值条件</strong>（teacher forcing），推理时用<strong>预测条件</strong>。</li>
+<li><strong>注入方式</strong>：可以像时间步 <code>t</code> 一样走 AdaLN 调制，也可以直接拼进输入嵌入；每个条件还能配独立的 CFG。</li>
+</ul>
+<h3 id="3-和既有工作的关系"><a href="#3-和既有工作的关系" class="headerlink" title="3. 和既有工作的关系"></a>3. 和既有工作的关系</h3><p>这不是全新范式——FastSpeech 2 / NaturalSpeech 早就用 variance adaptor，IndexTTS 2 做了时长/情感解耦，VoiceStar 用 PM-RoPE 在 AR 上做时长控制。<strong>空位在于：把它做进”非自回归 + 流匹配 + 零样本克隆”这个组合里，并且把解耦做干净。</strong> F5 恰好是 NAR，能和 AR 系（VoiceStar 那类）形成对照。</p>
+<h3 id="4-三个真正的难点"><a href="#4-三个真正的难点" class="headerlink" title="4. 三个真正的难点"></a>4. 三个真正的难点</h3><ol>
+<li><strong>监督从哪来</strong>：对齐、F0、能量的提取比”音频对”麻烦，且对齐误差会传下去。</li>
+<li><strong>训练 / 推理不一致</strong>：训练喂真值、推理喂预测，预测有误差就会掉质量。要处理（按概率混用预测值、条件 dropout、给每个条件配 CFG）。</li>
+<li><strong>解耦的泄漏</strong>（最要命）：时长和内容强相关、音高和说话人强相关。naive 地多接几个头，很容易把”说话人身份”漏进音高、”语速”漏进情感，结果”换音色时韵律跟着变”。<strong>能不能干净解耦，才是这类工作的卖点。</strong> 数据层面的解法见下面第 5 小节。</li>
+<li><strong>一对多</strong>：韵律从文本不可唯一确定（同一句话有很多种说法），所以要么加风格/情感条件，要么允许采样。</li>
+</ol>
+<h3 id="5-解耦光靠架构不够，还得靠数据增强"><a href="#5-解耦光靠架构不够，还得靠数据增强" class="headerlink" title="5. 解耦光靠架构不够，还得靠数据增强"></a>5. 解耦光靠架构不够，还得靠数据增强</h3><p>上面说的”泄漏”，解法其实很便宜：给训练数据做<strong>语速扰动增广</strong>。同一句音频用 0.8、1.2 这类因子做时间伸缩，文本保持不变。这样一来，”同一个人说话有快有慢”就成了事实，模型没法再用语速去猜说话人，时长头也只能老老实实看着文本来预测。</p>
+<p>两个要注意的地方：</p>
+<ul>
+<li>每句随机挑一个因子就够了，不用每句话做好几个版本，数据量控制在一倍多一点；</li>
+<li>伸缩要用<strong>保音高的 tempo</strong>（sox 的 <code>tempo</code> 效果，或 torchaudio 的 phase vocoder），别用 <code>speed</code>——<code>speed</code> 变速的同时也变调，音高一变音色就变了，等于亲手把说话人标签弄脏。</li>
+</ul>
+<h2 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h2><ol>
+<li><strong>F5 的”语速”是从参考音频比例反推的</strong>，参考里有多少停顿、音文对不对得上，会一比一转移到生成结果——这是今天所有坑的根因。</li>
+<li>想控时长，别去碰流时间 <code>t</code>（那等于 Sway Sampling）；该建的是<strong>独立的时长机制</strong>：短中期用 duration predictor，长期把它变成条件。</li>
+<li><strong>F5 在解耦度上是”零”</strong>：没有 speaker/pitch/energy 头，音色/内容/韵律/时长全部纠缠。</li>
+<li><strong>我的思路</strong>：加<strong>解耦的韵律预测头（时长/音高/能量）→ 当条件喂给下游流匹配生成器</strong>。范式成熟（variance adaptor），但”零样本 + NAR + 流匹配 + 干净解耦”这个组合有空位。</li>
+<li>难点不在”能不能加头”，而在<strong>监督来源、训练/推理一致、以及解耦不泄漏</strong>——把这三件解决，就是一个像样的课题。</li>
+<li><strong>解耦泄漏在数据层面有个便宜的抓手</strong>：语速扰动增广（保音高的 tempo），每句随机一个伸缩因子、数据翻倍以内就能打破”语速↔音色”的相关性。</li>
+</ol>
+<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="F5-的时长估算（要替换的目标）"><a href="#F5-的时长估算（要替换的目标）" class="headerlink" title="F5 的时长估算（要替换的目标）"></a>F5 的时长估算（要替换的目标）</h3><pre><code># utils_infer.py:503 ref_text_len = len(ref_text.encode("utf-8")) gen_text_len = len(gen_text.encode("utf-8")) duration = ref_audio_len + int(ref_audio_len / ref_text_len * gen_text_len / local_speed) </code></pre>
+
+<h3 id="参考音频-12s-会被截断（坑的来源）"><a href="#参考音频-12s-会被截断（坑的来源）" class="headerlink" title="参考音频 >12s 会被截断（坑的来源）"></a>参考音频 &gt;12s 会被截断（坑的来源）</h3><pre><code># utils_infer.py:325 if len(non_silent_wave) &gt; 6000 and len(non_silent_wave + non_silent_seg) &gt; 12000:     show_info("Audio is over 12s, clipping short. (1)")     break </code></pre>
+
+<h3 id="Sway-Sampling：改的是流时间-t-的分布"><a href="#Sway-Sampling：改的是流时间-t-的分布" class="headerlink" title="Sway Sampling：改的是流时间 t 的分布"></a>Sway Sampling：改的是流时间 t 的分布</h3><pre><code># cfm.py:263 if sway_sampling_coef is not None:     t = t + sway_sampling_coef * (torch.cos(torch.pi / 2 * t) - 1 + t) </code></pre>
+
+<h3 id="RoPE-的注入点（普通、未归一化）"><a href="#RoPE-的注入点（普通、未归一化）" class="headerlink" title="RoPE 的注入点（普通、未归一化）"></a>RoPE 的注入点（普通、未归一化）</h3><pre><code># dit.py:418 → block → modules.py:601 rope = self.rotary_embed.forward_from_seq_len(seq_len) query = apply_rotary_pos_emb(query, freqs, q_xpos_scale) key   = apply_rotary_pos_emb(key,   freqs, k_xpos_scale) </code></pre>
+
+<h3 id="注入一个条件（多头的目标形态，仿时间步-t）"><a href="#注入一个条件（多头的目标形态，仿时间步-t）" class="headerlink" title="注入一个条件（多头的目标形态，仿时间步 t）"></a>注入一个条件（多头的目标形态，仿时间步 t）</h3><pre><code># 条件向量 c 与时间嵌入一样进入 AdaLN 调制 / 或拼进输入 x = self.input_embed(torch.cat((x, cond, text_embed, duration_emb, f0_emb), dim=-1)) </code></pre>
+
+<h3 id="语速扰动增广（务必保音高）"><a href="#语速扰动增广（务必保音高）" class="headerlink" title="语速扰动增广（务必保音高）"></a>语速扰动增广（务必保音高）</h3><pre><code># 增广只用保音高的 tempo；sox/torchaudio 的 speed 变速又变调，会污染音色标签 import torch, torchaudio  wav, sr = torchaudio.load("utt.wav")     # (C, T)  # 方式一：sox tempo（&gt;1 变快，&lt;1 变慢） aug, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, [["tempo", "1.15"]])  # 方式二：phase vocoder（纯 torch 实现，不依赖 sox，Windows 上更稳） spec = torch.stft(wav, 1024, hop_length=256, return_complex=True) aug_spec = torchaudio.functional.phase_vocoder(spec, rate=1.15) aug = torch.istft(aug_spec, 1024, hop_length=256) </code></pre>
+</article>
+  </div>
+
+  <footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+
+  <div id="audio-ui" aria-label="声源选择"></div>
+
+  <script src="../../js/transition.js"></script>
+  <script type="module" src="../../js/wave.js"></script>
+</body>
+</html>

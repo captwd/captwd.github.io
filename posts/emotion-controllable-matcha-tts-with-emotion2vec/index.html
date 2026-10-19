@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>给 Matcha-TTS 加情感：emotion2vec 条件注入与 55 万步训练 · captwd</title>
+  <meta name="description" content="把 emotion2vec 句级向量接进 CFM decoder，在 ESD 上训练 55.3 万步（超过官方 Matcha 的 50 万）：WER 45.7%→13.0%、MCD 61.4→56.3；情感可辨识度仍有明显差距（ECA 28.8% vs 真实录音 68.6%），以及一次被 2 句样本验证指标骗过的评估教训。">
+  <link rel="canonical" href="https://captwd.github.io/posts/emotion-controllable-matcha-tts-with-emotion2vec/">
+  <meta property="og:type" content="article"><meta property="og:site_name" content="captwd · 波形笔记"><meta property="og:title" content="给 Matcha-TTS 加情感：emotion2vec 条件注入与 55 万步训练 · captwd"><meta property="og:description" content="把 emotion2vec 句级向量接进 CFM decoder，在 ESD 上训练 55.3 万步（超过官方 Matcha 的 50 万）：WER 45.7%→13.0%、MCD 61.4→56.3；情感可辨识度仍有明显差距（ECA 28.8% vs 真实录音 68.6%），以及一次被 2 句样本验证指标骗过的评估教训。"><meta property="og:url" content="https://captwd.github.io/posts/emotion-controllable-matcha-tts-with-emotion2vec/"><meta property="og:image" content="https://captwd.github.io/assets/share-card.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="article:published_time" content="2026-09-17">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="给 Matcha-TTS 加情感：emotion2vec 条件注入与 55 万步训练 · captwd"><meta name="twitter:description" content="把 emotion2vec 句级向量接进 CFM decoder，在 ESD 上训练 55.3 万步（超过官方 Matcha 的 50 万）：WER 45.7%→13.0%、MCD 61.4→56.3；情感可辨识度仍有明显差距（ECA 28.8% vs 真实录音 68.6%），以及一次被 2 句样本验证指标骗过的评估教训。"><meta name="twitter:image" content="https://captwd.github.io/assets/share-card.png">
+  <link rel="alternate" type="application/rss+xml" title="captwd · 波形笔记 RSS" href="https://captwd.github.io/rss.xml"><link rel="alternate" type="application/atom+xml" title="captwd · 波形笔记 Atom" href="https://captwd.github.io/atom.xml">
+  <link rel="stylesheet" href="../../css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+  <div class="bg-wrap">
+    <canvas id="bg" data-mode="ambient"></canvas>
+    <div class="bg-fallback"></div>
+  </div>
+  <div class="bg-veil"></div>
+
+  <header class="site-head">
+    <a class="brand" href="../../">
+      <span class="brand-dot"></span>
+      <span class="brand-name">captwd</span>
+      <span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+    </a>
+    <nav class="site-nav">
+      <a href="../../">首页</a>
+      <a href="../../posts/about-this-blog/">关于</a>
+      <a href="https://github.com/captwd" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="article-hero"><div class="card-tags"><span class="card-tag">TTS</span><span class="card-tag">情感合成</span><span class="card-tag">emotion2vec</span><span class="card-tag">训练监控</span></div><h1>给 Matcha-TTS 加情感：emotion2vec 条件注入与 55 万步训练</h1><div class="article-meta">2026-09-17 · captwd</div></section>
+
+  <div class="article-wrap">
+    <article class="article"><blockquote>
+<p>相关：<a href="/notes/#journal">Matcha-TTS 训练手记系列</a> ｜ 项目代码：<a target="_blank" rel="noopener" href="https://github.com/captwd/mamba-matcha-tts">https://github.com/captwd/mamba-matcha-tts</a></p>
+</blockquote>
+<p>前几篇都在改”客观质量”：换骨干、换采样、换评估协议，数据一直是单说话人的 LJSpeech。这篇换个方向——<strong>可控性</strong>：给定一句文本，指定用愤怒、开心还是悲伤的语气读出来。做法是把 <a target="_blank" rel="noopener" href="https://github.com/egerber5/Emotion2Vec-Supervised-and-Self-supervised">emotion2vec</a>（自监督语音情感表征模型）的句级向量接进 Matcha 的 CFM decoder，在 ESD 情感数据集上从 ep126 一路训到 <strong>ep2000，累计 55.3 万步</strong>。结果：可懂度大幅提升（WER 45.7% → 13.0%），但也确认了当前架构的短板：<strong>情感可辨识度仍然偏低</strong>。这一问题主要是由于学习率判断失误导致</p>
+<h2 id="设计：三件事防止模型”假装看条件”"><a href="#设计：三件事防止模型”假装看条件”" class="headerlink" title="设计：三件事防止模型”假装看条件”"></a>设计：三件事防止模型”假装看条件”</h2><table>
+<thead>
+<tr>
+<th>模块</th>
+<th>做法</th>
+<th>位置</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>条件注入</strong></td>
+<td>emotion2vec 句级向量 (768d) → 两层 MLP 投影到 64d → 与说话人嵌入一样沿时间复制、通道拼接进 CFM estimator 的输入</td>
+<td><code>matcha_tts.py</code> · <code>decoder.py</code></td>
+</tr>
+<tr>
+<td><strong>辅助分类器</strong></td>
+<td>3 层 Conv1d + mean/max 双池化的小分类头，接在 CFM 反推的预测干净梅尔 <code>x1_hat</code> 上做情感分类，交叉熵损失反传回 decoder</td>
+<td><code>emotion.py</code></td>
+</tr>
+<tr>
+<td><strong>条件 dropout + CFG</strong></td>
+<td>训练时按 10% 概率把情感向量置零；推理时 <code>emo_scale</code> 对 ODE 结果做线性外推放大情感</td>
+<td><code>flow_matching.py</code></td>
+</tr>
+</tbody></table>
+<p>辅助分类器是关键。条件生成有个经典失败模式：模型发现忽略条件也能把主损失降得差不多，于是条件被慢慢边缘化，训完发现情感没用上。对策就是加一个”监工”——生成器必须把情感画得连这个小分类器都认得出来，才算过关。实测它的验证损失在 ep30 左右就收敛到 ~0.05（5 类基本全对），说明情感通路确实被用起来了。</p>
+<p>emotion2vec 的选择也有讲究：它输出的是<strong>连续、细粒度</strong>的情感向量而不是 5 类标签，意味着推理时可以拿任意一段”你想要的语气”的参考音频抽一个向量传进去——情感迁移而不是简单的标签开关。</p>
+<h2 id="数据与管线"><a href="#数据与管线" class="headerlink" title="数据与管线"></a>数据与管线</h2><p>主战场是 <strong>ESD 英文子集</strong>：10 个说话人 × 5 种情感 × 350 句 = 17,500 条（同一批文本用不同情感各读一遍——所以”光看文本猜语气”在原理上就无解，条件向量就是消歧手段）。另有 RAVDESS（24 演员 × 8 情感）做小规模验证。</p>
+<p>管线三个脚本：重采样 + 生成 filelist（<code>prepare_esd.py</code>）、FunASR 加载 emotion2vec 批量抽特征（<code>extract_emotion2vec_funasr.py</code>，17,500 条句级 768d 向量）、从目录结构生成类别标签（<code>build_emo_labels.py</code>）。</p>
+<h2 id="训练：本地-127-轮-→-服务器-2000-轮"><a href="#训练：本地-127-轮-→-服务器-2000-轮" class="headerlink" title="训练：本地 127 轮 → 服务器 2000 轮"></a>训练：本地 127 轮 → 服务器 2000 轮</h2><p>先在本地跑通了 127 轮，确认情感通路收敛后整体迁到 4090 服务器，中途经历一次”衰减到底再回温”的 LR 调整（1e-4 阶梯衰减至 6.25e-6 → 回温 3e-5），最终训到 <strong>ep2000，累计 55.3 万步</strong>。</p>
+<p>运维这里问题很多，先简单讲两个吧。</p>
+<ul>
+<li><strong>Lightning 2.6 的 checkpoint 陷阱</strong>：<code>save_top_k=0</code> + <code>save_last=true</code> 的组合<strong>不会落盘</strong>——<code>last.ckpt</code> 只在”当轮存过编号 checkpoint”时才写入。第一次长跑 13 个 epoch 零 checkpoint，重启后只能从头再来。</li>
+<li><strong>被杀的 pip 会留下半棵包树</strong>：几次中断的安装让 numpy/scipy 目录混进了两个版本的文件。旧进程内存里有模块所以一切正常，<strong>服务器重启后新 import 直接 ABI 崩溃</strong>。修复只能彻底删除干净重装，并把副本放持久盘对抗平台的目录回滚。</li>
+</ul>
+<h2 id="结果：可懂度大幅提升"><a href="#结果：可懂度大幅提升" class="headerlink" title="结果：可懂度大幅提升"></a>结果：可懂度大幅提升</h2><p>统一协议（875 句验证集 · HiFi-GAN T2 · 10 步 ODE · 情感匹配条件 · seed 1234）：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>起点 ep126</th>
+<th><strong>终点 ep2000</strong></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>MCD ↓</td>
+<td>61.41</td>
+<td><strong>56.30</strong></td>
+</tr>
+<tr>
+<td>WER ↓</td>
+<td>45.7%</td>
+<td><strong>13.0%</strong></td>
+</tr>
+<tr>
+<td>CER ↓</td>
+<td>26.4%</td>
+<td><strong>4.9%</strong></td>
+</tr>
+<tr>
+<td>GT-WER（真人录音 ASR 上限）</td>
+<td>7.9%</td>
+<td>7.9%</td>
+</tr>
+</tbody></table>
+<p>逐句配对 Wilcoxon：MCD 改善 p = 2.8e-06（显著）。两个读法：<strong>可懂度的进步是决定性的</strong>——WER 从接近不可用的 45.7% 压到 13.0%，CER 4.9% 说明音素发音本身清晰，错误集中在词级。而天花板是 7.9%（连真人录音过同一个 ASR 都有这个错误率，情感韵律本身就会干扰识别），13% 意味着还有空间但已在可用区间。</p>
+<h3 id="MCD-为什么比-LJSpeech-系高那么多"><a href="#MCD-为什么比-LJSpeech-系高那么多" class="headerlink" title="MCD 为什么比 LJSpeech 系高那么多"></a>MCD 为什么比 LJSpeech 系高那么多</h3><p>把官方预训练模型放进来对比就清楚了。同协议（LJSpeech val 100 句）下官方 ckpt 的成绩是 <strong>MCD 26.1 dB / WER 7.0%</strong>（4 步 ODE 25.3，2 步 + sway 可到 24.6）——比 ESD 的 56.30 低了一倍不止。这中间一部分差距是”题面”不同，另一部分是训练时的学习率选择：</p>
+<ul>
+<li><strong>数据带宽</strong>：ESD 原始音频是 16 kHz，上采样到 22.05 kHz 后 8 kHz 以上没有真实能量，而声码器会”补”出高频——光是”GT → 声码器 → 重提 mel”的往返校准（理想下限），ESD 就有 <strong>9.94 dB</strong>，LJSpeech 只有 <strong>3.6</strong>；</li>
+<li><strong>任务方差</strong>：10 说话人 × 5 情感，同一句话的情感实现每次都不同，韵律差会直接进 MCD；</li>
+<li><strong>对齐官方训练量之后</strong>：本次 55.3 万步已超过官方的 50 万——训练量这一个变量已被消除，剩下的差距就主要落在上面两条”题面差异”上。</li>
+</ul>
+<p>一个更公平的视角：两个模型都坐在各自数据”理想下限”上方约 <strong>46 dB</strong>（ESD：56.30 − 9.94；LJSpeech：26.1 对应的下限另有测算，量级同理）。MCD 只在”同数据集 + 同协议”内可比，所以 ESD 和 LJSpeech 的结果应分开两张表看。</p>
+<h3 id="试听（同一说话人，三种情感-×-两种-CFG-强度）"><a href="#试听（同一说话人，三种情感-×-两种-CFG-强度）" class="headerlink" title="试听（同一说话人，三种情感 × 两种 CFG 强度）"></a>试听（同一说话人，三种情感 × 两种 CFG 强度）</h3><p>三条文本分别匹配 happy / angry / sad 的类别中心向量，spk 0，10 步 ODE：</p>
+<table>
+<thead>
+<tr>
+<th>情感</th>
+<th>文本</th>
+<th>s=1.0（自然）</th>
+<th>s=2.0（加强）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>😊</td>
+<td>“We are going to the beach this weekend, I am so excited!”</td>
+<td><audio controls="" preload="none" src="/emo_audio/00_happy_s1.mp3"></audio></td>
+<td><audio controls="" preload="none" src="/emo_audio/00_happy_s2.mp3"></audio></td>
+</tr>
+<tr>
+<td>😠</td>
+<td>“How many times do I have to tell you not to leave the door open?”</td>
+<td><audio controls="" preload="none" src="/emo_audio/00_angry_s1.mp3"></audio></td>
+<td><audio controls="" preload="none" src="/emo_audio/00_angry_s2.mp3"></audio></td>
+</tr>
+<tr>
+<td>😢</td>
+<td>“I still remember the day she left, it was raining heavily.”</td>
+<td><audio controls="" preload="none" src="/emo_audio/00_sad_s1.mp3"></audio></td>
+<td><audio controls="" preload="none" src="/emo_audio/00_sad_s2.mp3"></audio></td>
+</tr>
+</tbody></table>
+<p>（s 是推理期 CFG 外推强度，越大情感越夸张。）</p>
+<h2 id="情感可辨识度：当前的主要短板"><a href="#情感可辨识度：当前的主要短板" class="headerlink" title="情感可辨识度：当前的主要短板"></a>情感可辨识度：当前的主要短板</h2><p>用 emotion2vec + 线性探针对 875 条合成音频做情感识别（ECA，即”机器能不能听出这句话是什么情感”），并与真实录音对照：</p>
+<table>
+<thead>
+<tr>
+<th>音频集</th>
+<th>ECA</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GT 真实录音（天花板）</td>
+<td><strong>68.6%</strong></td>
+</tr>
+<tr>
+<td>合成音频（ep2000）</td>
+<td><strong>28.8%</strong></td>
+</tr>
+</tbody></table>
+<p>两个补充事实：① 5 类中 4 类的合成样本被判成 angry（happy 仅 9.6% 被认出）；② <strong>合成域内探针只有 20.2% = 随机水平</strong>——即不管想表达什么情感，合成音频在 emotion2vec 的嵌入空间里几乎落在同一个位置。对照真实录音 68.6% 的可分性，<strong>情感信息确实没有充分落地到音频里</strong>。</p>
+<p>这条短板也解释了训练期的一个反差：辅助分类器准确率 99%，但那是”分类器读模型自己输出的 mel 微差”的闭环指标——它认得出，不代表 emotion2vec 或人耳认得出。</p>
+<h2 id="过程数据与一条评估教训"><a href="#过程数据与一条评估教训" class="headerlink" title="过程数据与一条评估教训"></a>过程数据与一条评估教训</h2><p>中间各 checkpoint 的同协议数据（MCD / WER）：</p>
+<table>
+<thead>
+<tr>
+<th>ep126</th>
+<th>ep183</th>
+<th>ep1199</th>
+<th>ep2000</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>61.41 / 45.7%</td>
+<td>60.52 / 33.5%</td>
+<td>56.85 / 13.0%</td>
+<td>56.30 / 13.0%</td>
+</tr>
+</tbody></table>
+<p>增益集中在 ep126 → ep1199 段；之后以 3e-5 再续 800 轮，MCD 仅 −0.55dB（Wilcoxon p=2.8e-06，显著但幅度小）、WER 完全持平（p=0.944）。</p>
+<p>对这份”持平”，我的解读是<strong>学习率问题，而非已收敛</strong>：v1 后期把 LR 阶梯衰减到了 6.25e-6——比同类生成式语音模型的常用水平（约 1e-4，见<a href="/posts/300m-speech-models-learning-rate-reference/">《300M 量级语音模型学习率速查》</a>）低了 16 倍，模型被”冻”进低步长平台期；3e-5 回温续训期间，验证 val_mcd 的最优值一直在改善（58.61 → 57.16，直到 ep2000 上限截断仍未停止）——<strong>不是没得进步了，是行程被上限掐断</strong>。下一次实验，LR 不应再衰减到这么低。</p>
+<p>另有一条评估教训：训练期每轮只用验证集”2 句”快速算的 val_mcd 曲线，曾显示”ep349 触底后 +7.6dB 过拟合”，差点据此放弃 1200 轮的成果。事后用全量协议评估证伪——2 句均值的抽样误差就有 ±10dB（句间标准差 ±13~15），那条”趋势”完全是噪声。<strong>小样本验证指标既不能诊断过拟合，也不能拿来做 EarlyStopping 的监控</strong>（v2 就盯着它在 ep263 提前停了）。</p>
+<h2 id="结论与下一步"><a href="#结论与下一步" class="headerlink" title="结论与下一步"></a>结论与下一步</h2><ul>
+<li><strong>条件注入 + 辅助分类器的设计成立</strong>：可懂度达标（WER 13.0%）；续训 800 轮收益收窄（MCD −0.55dB / WER 持平），但主因是终点 lr 已衰至 6.25e-6——模型是在低步长平台期上被叫停的，不是无路可走；</li>
+<li><strong>主要短板明确</strong>：情感可辨识度（ECA 28.8% vs 真实 68.6%，合成域内探针=随机）——瓶颈不在训练量，在情感信号的表达强度与外部可验证性；</li>
+<li><strong>v4 方向</strong>：<code>emo_aux_loss</code> 0.2 → 0.5 并加深分类器；辅助分类器先用真实 ESD mel 预训练（锚定人耳可闻的情感线索，避免闭环自嗨）；训练中每 25 轮自动跑一次小规模 ECA 探针写进 tensorboard；</li>
+<li><strong>数据扩容</strong>是根本解：全量 ESD（含中文 10 说话人）或 RAVDESS 混训；</li>
+<li>推理侧 <code>emo_scale</code> 扫描与”参考音频现场抽情感”的 zero-shot 用法，值得一篇单独展开。</li>
+</ul>
+<p>一句话总结：<strong>“能不能做带情感的 TTS”——做通了，55 万步训练把可懂度做进了可用区间；”情感听上去够不够带感”——还差得远，下一步要让外部探针和人耳都认得出这份情感。</strong></p>
+</article>
+  </div>
+
+  <footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+
+  <div id="audio-ui" aria-label="声源选择"></div>
+
+  <script src="../../js/transition.js"></script>
+  <script type="module" src="../../js/wave.js"></script>
+</body>
+</html>

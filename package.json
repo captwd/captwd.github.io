@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "3D waveform blog — three.js particle field",
   "scripts": {
-    "start": "node serve.mjs 8137"
+    "start": "node serve.mjs 8137",
+    "generate:site-data": "node scripts/generate-site-data.js"
   },
   "type": "commonjs",
   "dependencies": {

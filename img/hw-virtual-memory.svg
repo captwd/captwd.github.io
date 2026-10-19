@@ -1,0 +1,35 @@
+<svg viewBox="0 0 940 330" xmlns="http://www.w3.org/2000/svg">
+  <g font-size="12">
+    <rect x="30" y="50" width="200" height="90" rx="8" fill="#e8f4ee" stroke="#1e7a55"/>
+    <text x="130" y="75" text-anchor="middle" font-weight="bold" fill="#14573c">进程的虚拟地址空间</text>
+    <text x="130" y="96" text-anchor="middle" fill="#666">每个进程独享一整套地址</text>
+    <text x="130" y="116" text-anchor="middle" fill="#666">0x7fff…（看似连续）</text>
+
+    <rect x="390" y="40" width="160" height="60" rx="8" fill="#fff" stroke="#b7791f"/>
+    <text x="470" y="64" text-anchor="middle" fill="#b7791f" font-weight="bold">MMU + TLB</text>
+    <text x="470" y="84" text-anchor="middle" fill="#666">查页表：虚拟页→物理页</text>
+
+    <rect x="700" y="30" width="220" height="110" rx="8" fill="#1e7a55"/>
+    <text x="810" y="56" text-anchor="middle" fill="#fff" font-weight="bold">物理内存（DRAM）</text>
+    <text x="810" y="78" text-anchor="middle" fill="#d8ede4">页 = 4KB 的分配单位</text>
+    <text x="810" y="98" text-anchor="middle" fill="#d8ede4">页缓存（文件副本）也住这里</text>
+    <text x="810" y="118" text-anchor="middle" fill="#d8ede4">pinned 页：锁死不许换出</text>
+
+    <rect x="390" y="150" width="160" height="60" rx="8" fill="#fce8e6" stroke="#c0392b"/>
+    <text x="470" y="174" text-anchor="middle" fill="#c0392b" font-weight="bold">缺页异常</text>
+    <text x="470" y="194" text-anchor="middle" fill="#666"> Minor：从页缓存补</text>
+    <text x="470" y="212" text-anchor="middle" fill="#666"> Major：要读磁盘！</text>
+
+    <rect x="700" y="180" width="220" height="80" rx="8" fill="#64748b"/>
+    <text x="810" y="206" text-anchor="middle" fill="#fff" font-weight="bold">换页（swap/pagefile）</text>
+    <text x="810" y="228" text-anchor="middle" fill="#eee">内存吃紧时，系统把冷页</text>
+    <text x="810" y="246" text-anchor="middle" fill="#eee">写回磁盘腾地方——每次访问变慢 10⁵ 倍</text>
+  </g>
+  <g stroke="#1e7a55" stroke-width="2" fill="none" marker-end="url(#ar2)">
+    <line x1="230" y1="90" x2="387" y2="70"/>
+    <line x1="550" y1="70" x2="697" y2="75"/>
+    <line x1="230" y1="120" x2="387" y2="180" stroke="#c0392b"/>
+    <line x1="550" y1="180" x2="697" y2="225" stroke="#c0392b"/>
+  </g>
+  <text x="470" y="300" text-anchor="middle" font-size="12.5" fill="#666">TLB 命中 → 地址翻译 ~1 周期；TLB 未中 → 查页表（多次访存）；缺 Major 页 → 读盘（ms 级）。pinned memory 就是"跟 OS 打包票不换出"的页——所以 H2D 拷贝才能异步直送</text>
+</svg>

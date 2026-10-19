@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://captwd.github.io/sitemap.xml

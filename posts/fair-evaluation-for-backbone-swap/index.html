@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>换骨干实验怎么做才公平：MCD 标定、协议统一与配对检验 · captwd</title>
+  <meta name="description" content="换骨干实验的方法论：MCD 标定、评估协议统一、配对显著性检验与混淆变量的剥离。">
+  <link rel="canonical" href="https://captwd.github.io/posts/fair-evaluation-for-backbone-swap/">
+  <meta property="og:type" content="article"><meta property="og:site_name" content="captwd · 波形笔记"><meta property="og:title" content="换骨干实验怎么做才公平：MCD 标定、协议统一与配对检验 · captwd"><meta property="og:description" content="换骨干实验的方法论：MCD 标定、评估协议统一、配对显著性检验与混淆变量的剥离。"><meta property="og:url" content="https://captwd.github.io/posts/fair-evaluation-for-backbone-swap/"><meta property="og:image" content="https://captwd.github.io/assets/share-card.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="article:published_time" content="2026-09-11">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="换骨干实验怎么做才公平：MCD 标定、协议统一与配对检验 · captwd"><meta name="twitter:description" content="换骨干实验的方法论：MCD 标定、评估协议统一、配对显著性检验与混淆变量的剥离。"><meta name="twitter:image" content="https://captwd.github.io/assets/share-card.png">
+  <link rel="alternate" type="application/rss+xml" title="captwd · 波形笔记 RSS" href="https://captwd.github.io/rss.xml"><link rel="alternate" type="application/atom+xml" title="captwd · 波形笔记 Atom" href="https://captwd.github.io/atom.xml">
+  <link rel="stylesheet" href="../../css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+  <div class="bg-wrap">
+    <canvas id="bg" data-mode="ambient"></canvas>
+    <div class="bg-fallback"></div>
+  </div>
+  <div class="bg-veil"></div>
+
+  <header class="site-head">
+    <a class="brand" href="../../">
+      <span class="brand-dot"></span>
+      <span class="brand-name">captwd</span>
+      <span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+    </a>
+    <nav class="site-nav">
+      <a href="../../">首页</a>
+      <a href="../../posts/about-this-blog/">关于</a>
+      <a href="https://github.com/captwd" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="article-hero"><div class="card-tags"><span class="card-tag">实验方法</span><span class="card-tag">TTS</span><span class="card-tag">统计检验</span><span class="card-tag">MCD</span></div><h1>换骨干实验怎么做才公平：MCD 标定、协议统一与配对检验</h1><div class="article-meta">2026-09-11 · captwd</div></section>
+
+  <div class="article-wrap">
+    <article class="article"><blockquote>
+<p><strong>系列 · Matcha-TTS 训练手记</strong> ｜ <a href="/notes/#journal">目录</a> ｜ 上一篇：<a href="/posts/integrate-bidirectional-mamba2-into-matcha-tts/">双向 Mamba2 集成</a></p>
+</blockquote>
+<p>前两篇把 Mamba 换进了 Matcha-TTS，但”换成功”和”能下结论”是两回事。这一篇记录做对比实验时踩过的三个方法论问题：代理指标骗人、协议不统一、以及调度器和骨干混在一起没法归因。</p>
+<h2 id="一、先把指标的口径搞清楚"><a href="#一、先把指标的口径搞清楚" class="headerlink" title="一、先把指标的口径搞清楚"></a>一、先把指标的口径搞清楚</h2><p>评估用的是三个指标：<strong>MCD（mel 倒谱失真）</strong>、<strong>WER / CER（ASR 转写的词/字错误率）</strong>。每个都有陷阱。</p>
+<h3 id="MCD-的绝对数值没有普适意义"><a href="#MCD-的绝对数值没有普适意义" class="headerlink" title="MCD 的绝对数值没有普适意义"></a>MCD 的绝对数值没有普适意义</h3><p>自研的 MCD 提取器（log-mel 80 + DCT + DTW 对齐）和论文里常用的 SPTK-mcep 量纲不同，所以要做<strong>同体系标定</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>参照点</th>
+<th>数值</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>声码器往返（真实 mel → wav → 声码器 → mel）</td>
+<td>~3.65 dB</td>
+<td>链路无损的理论下限</td>
+</tr>
+<tr>
+<td>已训模型</td>
+<td>~51–53 dB</td>
+<td>当前水平</td>
+</tr>
+<tr>
+<td>跨语句自然语音对照</td>
+<td>~55–90 dB</td>
+<td>超过这个量级说明细节已经很糊</td>
+</tr>
+</tbody></table>
+<p>所以”51.58 比 52.88 好”要在<strong>同一提取器下</strong>说，不能跨论文比绝对值。</p>
+<h3 id="WER-有天花板，会压缩差异"><a href="#WER-有天花板，会压缩差异" class="headerlink" title="WER 有天花板，会压缩差异"></a>WER 有天花板，会压缩差异</h3><p>用 wav2vec2 做 ASR 时，<strong>真实语音本身</strong>转写就有错（这个叫 GT-WER）。我们的 val 100 句 GT-WER = <strong>7.6%</strong>，意味着合成语音的 WER 最好也就能压到 7.6% 附近；当几个系统的 WER 都在 9% 上下时，差异空间本身只有 1 个多百分点，<strong>WER 不显著 ≠ 没有变好</strong>，很可能是天花板效应。</p>
+<h2 id="二、被代理指标骗过的一次"><a href="#二、被代理指标骗过的一次" class="headerlink" title="二、被代理指标骗过的一次"></a>二、被代理指标骗过的一次</h2><p>训练过程中每个验证点会算一个 <code>val_mcd</code>，但它是<strong>只取 2 条样本</strong>的快速代理。看那条曲线，后期一直在 56–59dB 徘徊，一度让人以为”这版骨干不行”。</p>
+<p>结果跑完整的 100 句评估：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>训练时代理（2 句）</th>
+<th>全量评估（100 句）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>MCD</td>
+<td>56.8 – 59.4</td>
+<td><strong>51.70</strong></td>
+</tr>
+</tbody></table>
+<p>差了 5dB 以上，方向都反了。教训很直接：</p>
+<ul>
+<li><strong>代理指标只能看趋势，不能用来选型或下结论</strong></li>
+<li>样本量太小时 MCD 的方差极大（不同句子本身的 MCD 差异就很大）</li>
+<li>训练日志里的指标要注明样本量和用途，别和正式评估数字混在一张表里</li>
+</ul>
+<h2 id="三、协议不统一，等于没比"><a href="#三、协议不统一，等于没比" class="headerlink" title="三、协议不统一，等于没比"></a>三、协议不统一，等于没比</h2><p>早期实验里不同系统用了不同声码器（BigVGAN / HiFi-GAN）、不同去噪开关，表格里数字混着放。虽然此前做过双骨干等价性验证（同 checkpoint 换声码器的逐句差异不显著），但<strong>要拿来做最终结论，协议必须统一</strong>。</p>
+<p>最终定版：<strong>HiFi-GAN T2 + Denoiser（原论文配方）+ val 全量 100 句 + ODE 10 步</strong>，所有系统同一个流程。</p>
+<p>统一协议后还做了一件事：<strong>把最强的对照组按新协议重评</strong>。之前那个”衰减 LR 的 ConvNeXt”最佳点只有 no-deno 的数字，于是用同一个 HiFi-GAN + Denoiser 重跑了一遍，避免”系统 A 挂 denoiser、系统 B 不挂”的隐性偏差。</p>
+<h2 id="四、用配对检验，而不是只看均值"><a href="#四、用配对检验，而不是只看均值" class="headerlink" title="四、用配对检验，而不是只看均值"></a>四、用配对检验，而不是只看均值</h2><p>100 句评估会逐句导出 CSV（mcd / wer / cer / 长度），这让我们可以做<strong>逐句配对的 Wilcoxon 符号秩检验</strong>——比只比平均值严谨得多，因为它消掉了”句子难度”这一项方差。</p>
+<p>最终三系统同协议结果：</p>
+<table>
+<thead>
+<tr>
+<th>系统</th>
+<th>MCD (dtw)</th>
+<th>WER</th>
+<th>CER</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>U-Net ep140（恒定 LR）</td>
+<td>52.85 ±17.16</td>
+<td>9.3%</td>
+<td>2.5%</td>
+</tr>
+<tr>
+<td>ConvNeXt V2（衰减 LR，最强对照）</td>
+<td>50.88 ±16.22</td>
+<td>10.4%</td>
+<td>2.6%</td>
+</tr>
+<tr>
+<td><strong>双向 Mamba2 ep139（衰减 LR）</strong></td>
+<td>51.70 ±17.36</td>
+<td><strong>8.7%</strong></td>
+<td><strong>2.3%</strong></td>
+</tr>
+</tbody></table>
+<p>逐句配对 Wilcoxon（n=100）：</p>
+<table>
+<thead>
+<tr>
+<th>对比</th>
+<th>MCD Δ</th>
+<th>p</th>
+<th>WER Δ</th>
+<th>p</th>
+<th>CER Δ</th>
+<th>p</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Mamba vs U-Net（恒定 LR）</td>
+<td><strong>−1.16</strong></td>
+<td><strong>0.0015</strong></td>
+<td>−0.6pt</td>
+<td>0.30</td>
+<td>−0.2pt</td>
+<td>0.67</td>
+</tr>
+<tr>
+<td>Mamba vs ConvNeXt（衰减 LR，最强对照）</td>
+<td>+0.82</td>
+<td>0.23</td>
+<td><strong>−1.7pt</strong></td>
+<td><strong>0.023</strong></td>
+<td>−0.3pt</td>
+<td>0.29</td>
+</tr>
+</tbody></table>
+<p>这张表能读出的、<strong>能写的</strong>结论：</p>
+<ol>
+<li>对上最强对照，MCD 是<strong>打平</strong>（+0.82，p=0.23 不显著），WER 是<strong>显著更优</strong>（p=0.023）</li>
+<li>对上恒定 LR 的基线，MCD 显著改善，但这个改善里<strong>含有 LR 衰减的贡献</strong>（见下节）</li>
+</ol>
+<h2 id="五、混进了调度器：一个必须承认的混淆变量"><a href="#五、混进了调度器：一个必须承认的混淆变量" class="headerlink" title="五、混进了调度器：一个必须承认的混淆变量"></a>五、混进了调度器：一个必须承认的混淆变量</h2><p>Mamba 那条 run 从一开始就挂了 LR 阶梯衰减（1e-4 → 6.25e-6），而 U-Net 基线是恒定 LR 训的。所以 “Mamba vs U-Net 的 −1.16dB” <strong>不能全算在骨干头上</strong>。</p>
+<p>更早的对照实验已经量化过纯调度分量：同一条 U-Net 加衰减后，ep135 的 MCD 从 54.4 掉到 51.0 左右（配对 p&lt;0.0001）。也就是说，衰减单独就能贡献 1dB 量级。</p>
+<p><strong>剥离混淆后的诚实表述</strong>应该是：</p>
+<blockquote>
+<p>在同等调度与评估协议下，双向 Mamba2 骨干与最强的衰减 ConvNeXt 配置在 MCD 上持平，在 WER 上显著更优；同时参数量只增加 3%、复杂度线性。</p>
+</blockquote>
+<p>要彻底把”骨干”和”调度”分离，还差一个对照：<strong>恒定 LR 的 Mamba run</strong>。如果它像 U-Net 恒定 LR 一样震荡到 55+，那就同时证明了（1）震荡是调度问题不是骨干问题，（2）骨干差异的干净读数。（这条对照就是下一步。）</p>
+<h2 id="六、顺带记录一个调度器坑"><a href="#六、顺带记录一个调度器坑" class="headerlink" title="六、顺带记录一个调度器坑"></a>六、顺带记录一个调度器坑</h2><p>MultiStepLR 在<strong>恢复训练</strong>时很容易静默失效：仓库在 resume 时会把 scheduler 的步数计数器拨到 <code>恢复 epoch - 1</code>，如果你把里程碑按”本 run 的局部 epoch”写（比如 <code>[5, 15, 25, 35]</code>），而恢复点是 epoch 99，那这些里程碑<strong>永远够不到</strong>，全程就是恒定学习率——而且不报错。表现就是”衰减实验悄悄变回了恒定 LR 实验”。</p>
+<p>规避：</p>
+<ul>
+<li>里程碑一律写在<strong>全局 epoch 轴</strong>上（<code>[105, 115, 125, 135]</code>）</li>
+<li>训练中途抽查 checkpoint 里的 lr，确认调度真的生效</li>
+</ul>
+<h2 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h2><p>换骨干这类实验，想让结论站得住，基本就是这几条：</p>
+<ol>
+<li>统一协议：同一批评估数据、同一声码器、同一去噪设置、同一步数</li>
+<li>把最强的那组对照也按新协议重评一遍，别让它停在旧协议下</li>
+<li>代理指标只看趋势，别拿小样本量的代理去下结论</li>
+<li>逐句配对检验，而不是比均值</li>
+<li>控制调度这类混淆变量：要么两组同调度，要么写清楚”这部分增益里有多少来自调度”</li>
+<li>指标已经贴着上限时，如实说”不显著”，比硬凑一个”更好”更可信</li>
+</ol>
+<p>三篇下来，环境、集成、评估这条线就闭合了。代码、配置和评估脚本都在仓库里，欢迎复现和指正。</p>
+<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><p>评估脚本会逐句写出 <code>results.csv</code>（<code>utt_id, mcd_dtw, wer, cer, gt_wer, ...</code>），配对检验就是把它按 <code>utt_id</code> 对齐后跑 Wilcoxon：</p>
+<pre><code>import pandas as pd from scipy.stats import wilcoxon  mamba = pd.read_csv("results/eval_mamba_ep139_hifigan/results.csv").set_index("utt_id") base  = pd.read_csv("results/eval_baseline_ep140_hifigan/results.csv").set_index("utt_id")  common = mamba.index.intersection(base.index)      # 只保留两边都有的句子 a, b = mamba.loc[common], base.loc[common]  for col in ("wer", "cer", "mcd_dtw"):     d = a[col].astype(float) - b[col].astype(float)   # 逐句差值     p = wilcoxon(d, zero_method="wilcox").pvalue      # 配对符号秩检验     print(f"{col}: mamba={a[col].mean():.4f} base={b[col].mean():.4f} delta={d.mean():+.4f} p={p:.4f}") </code></pre>
+
+<p>配对检验消掉的是”句子难度”这一项方差，所以比直接比均值敏感得多——MCD 上 −1.16dB 的差距在这个样本量下就能到 p=0.0015。</p>
+<p>完整脚本见 <code>wsl_env/compare_final.sh</code>。</p>
+</article>
+  </div>
+
+  <footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+
+  <div id="audio-ui" aria-label="声源选择"></div>
+
+  <script src="../../js/transition.js"></script>
+  <script type="module" src="../../js/wave.js"></script>
+</body>
+</html>

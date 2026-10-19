@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>给蛋白距离预测注入统计势：想法与模型架构 · captwd</title>
+  <meta name="description" content="记录把 PDB 统计势注入 ESM2 距离预测的思路与架构：37-bin Cβ 统计势的构建、四种注入机制，以及&quot;架构 / 机制 / 内容&quot;三路分解的受控设计。">
+  <link rel="canonical" href="https://captwd.github.io/posts/injecting-statistical-potentials-ideas-and-architecture/">
+  <meta property="og:type" content="article"><meta property="og:site_name" content="captwd · 波形笔记"><meta property="og:title" content="给蛋白距离预测注入统计势：想法与模型架构 · captwd"><meta property="og:description" content="记录把 PDB 统计势注入 ESM2 距离预测的思路与架构：37-bin Cβ 统计势的构建、四种注入机制，以及&quot;架构 / 机制 / 内容&quot;三路分解的受控设计。"><meta property="og:url" content="https://captwd.github.io/posts/injecting-statistical-potentials-ideas-and-architecture/"><meta property="og:image" content="https://captwd.github.io/assets/share-card.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="article:published_time" content="2026-09-13">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="给蛋白距离预测注入统计势：想法与模型架构 · captwd"><meta name="twitter:description" content="记录把 PDB 统计势注入 ESM2 距离预测的思路与架构：37-bin Cβ 统计势的构建、四种注入机制，以及&quot;架构 / 机制 / 内容&quot;三路分解的受控设计。"><meta name="twitter:image" content="https://captwd.github.io/assets/share-card.png">
+  <link rel="alternate" type="application/rss+xml" title="captwd · 波形笔记 RSS" href="https://captwd.github.io/rss.xml"><link rel="alternate" type="application/atom+xml" title="captwd · 波形笔记 Atom" href="https://captwd.github.io/atom.xml">
+  <link rel="stylesheet" href="../../css/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+  <div class="bg-wrap">
+    <canvas id="bg" data-mode="ambient"></canvas>
+    <div class="bg-fallback"></div>
+  </div>
+  <div class="bg-veil"></div>
+
+  <header class="site-head">
+    <a class="brand" href="../../">
+      <span class="brand-dot"></span>
+      <span class="brand-name">captwd</span>
+      <span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+    </a>
+    <nav class="site-nav">
+      <a href="../../">首页</a>
+      <a href="../../posts/about-this-blog/">关于</a>
+      <a href="https://github.com/captwd" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="article-hero"><div class="card-tags"><span class="card-tag">PMF</span><span class="card-tag">ESM2</span><span class="card-tag">蛋白质</span><span class="card-tag">统计势</span><span class="card-tag">模型架构</span></div><h1>给蛋白距离预测注入统计势：想法与模型架构</h1><div class="article-meta">2026-09-13 · captwd</div></section>
+
+  <div class="article-wrap">
+    <article class="article"><p>深度学习做蛋白质结构预测已经很强了，于是就有个老问题：<strong>还需要显式地注入物理先验吗？</strong> 比如从 PDB 里统计出来的统计势（statistical potential of mean force, PMF）。这篇不谈结果，只记一下我在这件事上的<strong>想法</strong>和<strong>模型架构</strong>。</p>
+<h2 id="一、想法：把”注入有用”拆成三笔账"><a href="#一、想法：把”注入有用”拆成三笔账" class="headerlink" title="一、想法：把”注入有用”拆成三笔账"></a>一、想法：把”注入有用”拆成三笔账</h2><p>直接从 baseline 跳到”注入真实 PMF”，其实同时改动了三样东西：</p>
+<ul>
+<li><strong>架构</strong>：多了一个注意力模块，容量变大了；</li>
+<li><strong>机制</strong>：多了一条偏置信号进入注意力——不管它的数值是什么，都存在一个结构归纳偏置；</li>
+<li><strong>内容</strong>：这条偏置携带了物理知识（氨基酸对 × 距离的能量偏好）。</li>
+</ul>
+<p>这三者在任何”加 vs 不加”的对比里都是<strong>混在一起</strong>的，所以单看总分根本不知道收益来自哪里。我的想法是设计四个<strong>每次只变一个</strong>的条件，把账拆开：</p>
+<table>
+<thead>
+<tr>
+<th>条件</th>
+<th>变化</th>
+<th>逐差得到</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Baseline</td>
+<td>无轴向注意力、无注入</td>
+<td>测量原点</td>
+</tr>
+<tr>
+<td>Axial, zero bias</td>
+<td>加轴向注意力，偏置固定为 0</td>
+<td><strong>架构</strong>（模块容量）</td>
+</tr>
+<tr>
+<td>Shuffled PMF</td>
+<td>PMF 的氨基酸标签随机置换</td>
+<td><strong>机制</strong>（有偏置路径、无内容）</td>
+</tr>
+<tr>
+<td>True PMF</td>
+<td>完整统计势</td>
+<td><strong>内容</strong>（氨基酸特异的物理）</td>
+</tr>
+</tbody></table>
+<p>于是有一条加性路径分解：</p>
+<pre><code>Δtotal = Δarch + Δmech + Δcontent </code></pre>
+
+<ul>
+<li><code>Δarch = P@L(axial,0) − P@L(baseline)</code></li>
+<li><code>Δmech = P@L(shuffled) − P@L(axial,0)</code></li>
+<li><code>Δcontent = P@L(real) − P@L(shuffled)</code></li>
+</ul>
+<p>要强调：这是<strong>操作性、路径依赖</strong>的分解，不是唯一的因果划分。<strong>打乱对照是整个设计的命门</strong>——它只破坏”氨基酸 ↔ 能量”的对应，保留沿距离方向的分布形状，所以如果 <code>Δcontent ≈ 0</code>，就说明模型消费的是注入路径而不是物理内容。</p>
+<h2 id="二、模型架构"><a href="#二、模型架构" class="headerlink" title="二、模型架构"></a>二、模型架构</h2><p>整体是一条”序列 → 冻结的 ESM2 → 成对表示 → 距离分布”的流水线，外加一条从 PDB 统计出来的 PMF 分支。</p>
+<h3 id="1-输入与骨干"><a href="#1-输入与骨干" class="headerlink" title="1. 输入与骨干"></a>1. 输入与骨干</h3><p>输入是氨基酸序列。骨干是一个<strong>冻结</strong>的 ESM2 语言模型（强版 650M、1280 维；轻版 35M、480 维），逐残基 embedding <strong>预先抽取并缓存</strong>。冻结的好处是省显存、训练稳定，也把”骨干本身会不会变”这个变量固定住。</p>
+<h3 id="2-1D-n-gram-编码器"><a href="#2-1D-n-gram-编码器" class="headerlink" title="2. 1D n-gram 编码器"></a>2. 1D n-gram 编码器</h3><p>用 3/5/7 三种窗口的一维卷积，捕捉不同尺度的局部序列模式。</p>
+<h3 id="3-1D-→-2D：外和展开"><a href="#3-1D-→-2D：外和展开" class="headerlink" title="3. 1D → 2D：外和展开"></a>3. 1D → 2D：外和展开</h3><p>把每个残基的 1D 表示做 <strong>outer sum</strong> 得到成对表示，再加上<strong>相对位置编码</strong>。这一步把”每个残基”的信息变成”每对残基”的信息。</p>
+<h3 id="4-三角乘法块"><a href="#4-三角乘法块" class="headerlink" title="4. 三角乘法块"></a>4. 三角乘法块</h3><p>接 <strong>4 层 AlphaFold 风格的 triangle multiplication + 前馈网络</strong>。三角块的直觉是：如果 (i,j)、(j,k) 的关系已知，就能推断 (i,k)，从而让成对表示在几何上自洽。</p>
+<h3 id="5-轴向自注意力"><a href="#5-轴向自注意力" class="headerlink" title="5. 轴向自注意力"></a>5. 轴向自注意力</h3><p>在成对表示上做行/列方向的<strong>轴向自注意力</strong>。这个模块只在”注入条件”下启用——它也是”架构贡献”的来源，所以必须能被单独开关。</p>
+<h3 id="6-距离头（37-bin）"><a href="#6-距离头（37-bin）" class="headerlink" title="6. 距离头（37-bin）"></a>6. 距离头（37-bin）</h3><p>最后映射到 <strong>37 个 bin 的距离 logits</strong>，期望距离 = <code>Σ softmax(logits)_b · bin_center_b</code>。用分布而不是单点回归，是因为接触预测关心的是整个距离分布。</p>
+<h3 id="7-PMF-分支"><a href="#7-PMF-分支" class="headerlink" title="7. PMF 分支"></a>7. PMF 分支</h3><p>另一条支线从非冗余 PDB 结构出发：Cβ 提取 → 37-bin 统计 → 逆玻尔兹曼 → 得到能量谱 <code>E(37, 20, 20)</code>。<strong>它的 bin 边界必须和距离头的 bin 严格对齐</strong>，否则先验和模型输出会错位。</p>
+<h2 id="三、统计势（PMF）怎么建"><a href="#三、统计势（PMF）怎么建" class="headerlink" title="三、统计势（PMF）怎么建"></a>三、统计势（PMF）怎么建</h2><ul>
+<li><p><strong>来源</strong>：PISCES 非冗余 cull（序列同一性 ≤15%、分辨率 ≤2.5 Å、R-factor ≤0.3、仅 X-ray、链长 ≥40）。</p>
+</li>
+<li><p><strong>原子口径</strong>：Cβ–Cβ（Gly 没有 Cβ，退化为 Cα）。这样和 trRosetta 的 <code>dist</code> 字段、CASP 接触定义、AlphaFold2 的 distogram 口径一致。</p>
+</li>
+<li><p><strong>分箱</strong>：36 个 0.5 Å 的 bin 覆盖 <code>[2, 20)</code> Å，外加一个 far bin（≥20 Å）。</p>
+</li>
+<li><p><strong>逆玻尔兹曼</strong>：</p>
+<pre><code>E[aai, aaj, b] = − log [ P(r_b | aai, aaj) / P(r_b) ] </code></pre>
+
+<p>对称化后截断到 ±4；能量越低越有利，注入时用 <code>−E</code>。</p>
+</li>
+<li><p><strong>细节</strong>：只统计序列间隔 ≥2 的残基对（排除 i,i+1 这类由键长决定的近邻对）；伪计数 λ=1.0。</p>
+</li>
+</ul>
+<h2 id="四、四种注入机制"><a href="#四、四种注入机制" class="headerlink" title="四、四种注入机制"></a>四、四种注入机制</h2><p>所有注入变体共享一个统一形式 <code>E = exp(log_scale) · E_pmf + ΔE</code>，其中 <code>E_pmf</code> 是冻结的统计势，<code>ΔE</code> 是可学习残差。</p>
+<table>
+<thead>
+<tr>
+<th>机制</th>
+<th>层级</th>
+<th>做法</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>软查表 Soft lookup</td>
+<td>注意力</td>
+<td>用预测距离分布对 PMF 取期望能量 <code>E_ij = Σ_b p_ij(b) · E_pmf(ai,aj,b)</code>，<code>−E</code> 作为注意力偏置</td>
+</tr>
+<tr>
+<td>静态偏置 Static bias</td>
+<td>注意力</td>
+<td>一张与距离无关的氨基酸对倾向表，零额外计算</td>
+</tr>
+<tr>
+<td>特征门控 Feature gating</td>
+<td>特征</td>
+<td>把期望能量通过一个可学习 gate <code>α</code> 融合进成对表示</td>
+</tr>
+<tr>
+<td>物理能量损失</td>
+<td>损失</td>
+<td><code>L_phys = relu(E_soft − E_true − margin)</code>，惩罚”预测分布比真实结构能量更高”</td>
+</tr>
+</tbody></table>
+<p>每种真实 PMF 机制都配一个<strong>同路径的打乱 PMF 对照</strong>，这样机制和内容才可比。</p>
+<h2 id="五、表示层面的旁证（想法）"><a href="#五、表示层面的旁证（想法）" class="headerlink" title="五、表示层面的旁证（想法）"></a>五、表示层面的旁证（想法）</h2><p>除了预测指标，我还想从<strong>表征</strong>上看模型到底怎么用这条偏置。做法是算模型成对表示（距离头输入）与 PMF 能量谱的<strong>线性 CKA</strong>，以及各条件之间的表征相似度。直觉上：</p>
+<ul>
+<li>如果模型真的把 PMF 当知识用了，表征应该和 PMF 能量谱有可观的对齐；</li>
+<li>如果只是把偏置当”路径”消费，那么<strong>内容交换（真实 ↔ 打乱）</strong> 引起的表征变化，应该小于 <strong>机制开关</strong> 引起的表征变化。</li>
+</ul>
+<p>这是一个相关性的旁证，不能单独当因果结论，但和预测层面的匹配对照互补。</p>
+<h2 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h2><ol>
+<li>想验证”注入有没有用”，一定要有<strong>打乱对照</strong>和<strong>架构对照</strong>，否则分不清架构、机制和内容。</li>
+<li>统计势要建得和模型<strong>逐 bin 对齐</strong>，先验才不会和输出错位。</li>
+<li>注入可以发生在不同层级（注意力 / 特征 / 损失），但每种都要配自己的匹配对照。</li>
+<li>表征分析（CKA）是预测指标之外的一条旁证：看模型对”内容”和”机制”的反应谁更大。</li>
+</ol>
+<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="三路分解"><a href="#三路分解" class="headerlink" title="三路分解"></a>三路分解</h3><pre><code>d_arch    = mean(axial_zero) - mean(baseline) d_mech    = mean(shuffled)   - mean(axial_zero) d_content = mean(real)       - mean(shuffled) assert abs((d_arch + d_mech + d_content) - (mean(real) - mean(baseline))) &lt; 1e-9 </code></pre>
+
+<h3 id="软查表注入（注意力偏置）"><a href="#软查表注入（注意力偏置）" class="headerlink" title="软查表注入（注意力偏置）"></a>软查表注入（注意力偏置）</h3><pre><code># p_ij(b): 模型对 (i,j) 落在第 b 个距离 bin 的预测概率 E_soft = (p_ij * E_pmf[aa_i, aa_j, :]).sum(-1)   # 期望能量 attn_logits = attn_logits + (-E_soft)            # 低能量 -&gt; 高注意力 </code></pre>
+
+<h3 id="特征门控与物理损失"><a href="#特征门控与物理损失" class="headerlink" title="特征门控与物理损失"></a>特征门控与物理损失</h3><pre><code>pair = pair + alpha * E_soft                       # feature gating L_phys = torch.relu(E_soft - E_true - margin)      # loss-level hard constraint </code></pre>
+
+<h3 id="bin-对齐自检"><a href="#bin-对齐自检" class="headerlink" title="bin 对齐自检"></a>bin 对齐自检</h3><pre><code>assert np.allclose(BIN_EDGES, MODEL_BIN_EDGES) assert np.array_equal(AA_ORDER, "ACDEFGHIKLMNPQRSTVWY") </code></pre>
+</article>
+  </div>
+
+  <footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+
+  <div id="audio-ui" aria-label="声源选择"></div>
+
+  <script src="../../js/transition.js"></script>
+  <script type="module" src="../../js/wave.js"></script>
+</body>
+</html>

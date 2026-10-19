@@ -311,6 +311,9 @@
       oldRegions[i].replaceWith(document.adoptNode(newRegions[i]));
     }
     document.title = doc.title;
+    const seoSelector='meta[name="description"],meta[name^="twitter:"],meta[property^="og:"],meta[property^="article:"],link[rel="canonical"],link[rel="alternate"][type]';
+    document.head.querySelectorAll(seoSelector).forEach(node=>node.remove());
+    doc.head.querySelectorAll(seoSelector).forEach(node=>document.head.appendChild(node.cloneNode(true)));
     const renderedURL=new URL(url,location.href);renderedPage=renderedURL.pathname+renderedURL.search;
     const oldHeader = document.querySelector('.site-head'), newHeader = doc.querySelector('.site-head');
     if (oldHeader && newHeader) oldHeader.replaceWith(document.adoptNode(newHeader));

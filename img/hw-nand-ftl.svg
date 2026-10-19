@@ -1,0 +1,25 @@
+<svg viewBox="0 0 940 280" xmlns="http://www.w3.org/2000/svg">
+  <rect x="30" y="40" width="400" height="200" rx="10" fill="#f7faf8" stroke="#2563ab"/>
+  <text x="230" y="66" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#2563ab">① 读/写按"页"（4~16KB）</text>
+  <g>
+    <rect x="60" y="88" width="80" height="30" fill="#2563ab"/><text x="100" y="108" text-anchor="middle" fill="#fff" font-size="11">page 0</text>
+    <rect x="140" y="88" width="80" height="30" fill="#e8f4ee" stroke="#1e7a55"/><text x="180" y="108" text-anchor="middle" font-size="11">page 1</text>
+    <rect x="220" y="88" width="80" height="30" fill="#2563ab"/><text x="260" y="108" text-anchor="middle" fill="#fff" font-size="11">page 2</text>
+    <rect x="300" y="88" width="80" height="30" fill="#2563ab"/><text x="340" y="108" text-anchor="middle" fill="#fff" font-size="11">page 3</text>
+  </g>
+  <text x="230" y="150" text-anchor="middle" font-size="12" fill="#666">可以单独写一个空页</text>
+  <text x="230" y="172" text-anchor="middle" font-size="12" fill="#666">但同一页写第二次之前必须先擦</text>
+  <rect x="30" y="196" width="400" height="30" fill="#fce8e6"/>
+  <text x="230" y="216" text-anchor="middle" font-size="12" fill="#c0392b" font-weight="bold">② 擦除按"块"（= 几百个页一起！）</text>
+
+  <rect x="500" y="40" width="410" height="200" rx="10" fill="#fff" stroke="#b7791f"/>
+  <text x="705" y="66" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#b7791f">FTL（闪存转换层）：SSD 里的"翻译官"</text>
+  <g font-size="11.5" fill="#666">
+    <text x="520" y="94">① 你改写 4KB → SSD 不敢原地擦（要拖上几百页）</text>
+    <text x="520" y="116">② 于是把新数据写到别的空页，改映射表</text>
+    <text x="520" y="138">③ 旧页标记为"垃圾"，攒多了后台回收（GC）</text>
+    <text x="520" y="160">④ 副作用：写入放大（实际写 &gt; 你写的）、掉速</text>
+    <text x="520" y="188">⑤ 磨损均衡：FTL 故意把擦写摊到全盘所有块</text>
+    <text x="520" y="210" fill="#c0392b">⇒ SSD "写多了变慢"和"寿命"都源于此</text>
+  </g>
+</svg>
