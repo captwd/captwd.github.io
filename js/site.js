@@ -29,119 +29,117 @@
     return Array.isArray(post.tags) ? post.tags.slice(0, 1) : [];
   }
 
+  // Keep the library controls in one place. The 3D scene only reads the selected topic.
+  const libraryPreferences = { topic: '', year: '全部', query: '' };
+  const bodySearch = { index: new Map(), promise: null, ready: false, failures: 0 };
+
   function setupNotesLibrary(posts) {
     const grid = document.getElementById('post-grid');
     const input = document.getElementById('notes-search');
     if (!grid || !input) return;
+    if (grid.__notesLibraryState) {
+      grid.__notesLibraryState.posts = posts;
+      grid.__notesLibraryState.apply();
+      return;
+    }
 
     const years = document.getElementById('notes-year');
     const topicNav = document.getElementById('notes-topics');
     const status = document.getElementById('notes-results-status');
     const empty = document.getElementById('notes-empty');
-    let state = grid.__notesLibraryState;
+    const headingCount = document.querySelector('.notes-library .journal-topic');
+    const state = { posts, topic: libraryPreferences.topic, year: libraryPreferences.year, query: libraryPreferences.query };
+    grid.__notesLibraryState = state;
 
-    if (!state) {
-      state = {
-        posts,
-        activeTopic: '',
-        textIndex: new Map(),
-        bodyPromise: null,
-        requestId: 0,
-        timer: 0,
-      };
-      grid.__notesLibraryState = state;
-      state.loadBodies = function () {
-        if (state.bodyPromise) return state.bodyPromise;
-        state.bodyPromise = Promise.all(state.posts.map(async (post) => {
-          try {
-            const response = await fetch(new URL(`posts/${post.slug}/`, root));
-            if (!response.ok) return [post.slug, ''];
-            const html = await response.text();
-            const page = new DOMParser().parseFromString(html, 'text/html');
-            const article = page.querySelector('.article');
-            if (!article) return [post.slug, ''];
-            article.querySelectorAll('script,style').forEach((node) => node.remove());
-            return [post.slug, article.textContent.toLocaleLowerCase()];
-          } catch {
-            return [post.slug, ''];
-          }
-        })).then((entries) => {
-          state.textIndex = new Map(entries);
-        });
-        return state.bodyPromise;
-      };
-      state.apply = async function () {
-        const requestId = ++state.requestId;
-        const query = input.value.trim().toLocaleLowerCase();
-        const terms = query.split(/\s+/).filter(Boolean);
-        if (terms.length && !state.bodyPromise) {
-          if (status) status.textContent = '正在读取文章正文并搜索…';
-          await state.loadBodies();
+    function startBodySearch() {
+      if (bodySearch.promise) return;
+      bodySearch.promise = Promise.all(state.posts.map(async (post) => {
+        try {
+          const response = await fetch(new URL(`posts/${post.slug}/`, root));
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+          const article = page.querySelector('.article');
+          if (!article) throw new Error('Missing article');
+          article.querySelectorAll('script,style').forEach((node) => node.remove());
+          return [post.slug, article.textContent.toLocaleLowerCase('zh-CN'), false];
+        } catch {
+          return [post.slug, '', true];
         }
-        if (requestId !== state.requestId) return;
-
-        const year = years?.value || '全部';
-        const cards = [...grid.querySelectorAll('.card[data-post-slug]')];
-        let shown = 0;
-        for (const card of cards) {
-          const post = state.posts.find((item) => item.slug === card.dataset.postSlug);
-          if (!post) { card.hidden = true; continue; }
-          const postTopics = topicsFor(post);
-          const cardYear = String(post.date || '').slice(0, 4);
-          const searchable = [post.title, post.excerpt, ...(post.tags || []), ...(post.categories || []), state.textIndex.get(post.slug) || '']
-            .join(' ').toLocaleLowerCase();
-          const matches = (year === '全部' || year === cardYear)
-            && (!state.activeTopic || postTopics.includes(state.activeTopic))
-            && terms.every((term) => searchable.includes(term));
-          card.hidden = !matches;
-          if (matches) shown += 1;
-        }
-        if (empty) empty.hidden = shown > 0;
-        if (status) {
-          const filtered = terms.length || year !== '全部' || Boolean(state.activeTopic);
-          status.textContent = shown === 0
-            ? '没有匹配的笔记。'
-            : filtered ? `找到 ${shown} 篇笔记` : `共 ${shown} 篇笔记`;
-        }
-      };
-
-      if (years) {
-        const selected = years.value || '全部';
-        const yearValues = [...new Set(posts.map((post) => String(post.date || '').slice(0, 4)).filter((year) => /^\d{4}$/.test(year)))].sort().reverse();
-        years.replaceChildren(new Option('全部年份', '全部'));
-        yearValues.forEach((year) => years.add(new Option(year, year)));
-        if (yearValues.includes(selected)) years.value = selected;
-        years.addEventListener('change', () => state.apply());
-      }
-
-      if (topicNav) {
-        const topicValues = [...new Set(posts.flatMap(topicsFor))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
-        const addTopicButton = (label, topic) => {
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.textContent = label;
-          button.dataset.topic = topic;
-          button.setAttribute('aria-pressed', topic === state.activeTopic ? 'true' : 'false');
-          topicNav.appendChild(button);
-        };
-        topicNav.replaceChildren();
-        addTopicButton('全部', '');
-        topicValues.forEach((topic) => addTopicButton(topic, topic));
-        topicNav.addEventListener('click', (event) => {
-          const button = event.target.closest('button[data-topic]');
-          if (!button) return;
-          state.activeTopic = button.dataset.topic;
-          topicNav.querySelectorAll('button[data-topic]').forEach((item) => item.setAttribute('aria-pressed', item === button ? 'true' : 'false'));
-          state.apply();
-        });
-      }
-
-      input.addEventListener('input', () => {
-        clearTimeout(state.timer);
-        state.timer = setTimeout(() => state.apply(), 140);
+      })).then((entries) => {
+        bodySearch.index = new Map(entries.map(([slug, body]) => [slug, body]));
+        bodySearch.failures = entries.filter(([, , failed]) => failed).length;
+        bodySearch.ready = true;
+        document.getElementById('post-grid')?.__notesLibraryState?.apply();
       });
-    } else {
-      state.posts = posts;
+    }
+
+    state.apply = function () {
+      const terms = state.query.trim().toLocaleLowerCase('zh-CN').split(/\s+/).filter(Boolean);
+      if (terms.length) startBodySearch();
+      const cards = grid.querySelectorAll('.card[data-post-slug]');
+      const bySlug = new Map(state.posts.map((post) => [post.slug, post]));
+      let shown = 0;
+      for (const card of cards) {
+        const post = bySlug.get(card.dataset.postSlug);
+        if (!post) { card.hidden = true; continue; }
+        const searchable = [post.title, post.excerpt, ...(post.tags || []), ...(post.categories || []), bodySearch.index.get(post.slug) || '']
+          .join(' ').toLocaleLowerCase('zh-CN');
+        const matches = (state.year === '全部' || String(post.date || '').slice(0, 4) === state.year)
+          && (!state.topic || topicsFor(post).includes(state.topic))
+          && terms.every((term) => searchable.includes(term));
+        card.hidden = !matches;
+        if (matches) shown += 1;
+      }
+      if (headingCount) headingCount.textContent = `${state.topic || '全部'} / ${shown} 篇`;
+      if (empty) empty.hidden = shown > 0;
+      if (status) {
+        status.textContent = terms.length && !bodySearch.ready
+          ? `正在检索正文 · 当前匹配 ${shown} 篇`
+          : bodySearch.failures && terms.length
+            ? `找到 ${shown} 篇 · ${bodySearch.failures} 篇正文暂时无法读取，标题与摘要仍可搜索`
+            : `找到 ${shown} 篇笔记`;
+      }
+    };
+
+    input.value = state.query;
+    input.addEventListener('input', () => {
+      state.query = libraryPreferences.query = input.value;
+      state.apply();
+    });
+
+    if (years) {
+      const yearValues = [...new Set(posts.map((post) => String(post.date || '').slice(0, 4)).filter((year) => /^\d{4}$/.test(year)))].sort().reverse();
+      years.replaceChildren(new Option('全部年份', '全部'));
+      yearValues.forEach((year) => years.add(new Option(year, year)));
+      if (!yearValues.includes(state.year)) state.year = libraryPreferences.year = '全部';
+      years.value = state.year;
+      years.addEventListener('change', () => {
+        state.year = libraryPreferences.year = years.value;
+        state.apply();
+      });
+    }
+
+    if (topicNav) {
+      const topics = [...new Set(posts.flatMap(topicsFor))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+      if (!topics.includes(state.topic)) state.topic = libraryPreferences.topic = '';
+      const addButton = (label, topic) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = label;
+        button.dataset.topic = topic;
+        button.setAttribute('aria-pressed', String(topic === state.topic));
+        topicNav.appendChild(button);
+      };
+      topicNav.replaceChildren();
+      addButton('全部', '');
+      topics.forEach((topic) => addButton(topic, topic));
+      topicNav.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-topic]');
+        if (!button) return;
+        state.topic = libraryPreferences.topic = button.dataset.topic;
+        topicNav.querySelectorAll('button[data-topic]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+        state.apply();
+      });
     }
     state.apply();
   }

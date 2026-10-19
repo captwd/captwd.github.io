@@ -5,11 +5,34 @@ const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const escapeHTML = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const STORAGE = 'wave-notes-reading-v1';
 
+// The original four listening cues remain authored. Give migrated notes distinct,
+// stable points along the recording, so they do not all gather at its first phrase.
+function withLandscapeCoordinates(posts) {
+  const authored = posts.map((post) => post.landscape?.sound?.start).filter(Number.isFinite);
+  const slots = Array.from({ length: 25 }, (_, index) => 8 + index * 8)
+    .filter((time) => authored.every((fixed) => Math.abs(time - fixed) >= 4));
+  const colors = ['#a1f9d5', '#a8d9f2', '#b9b3ed', '#e4c99b', '#93d9ca'];
+  let next = 0;
+  return posts.map((post, index) => {
+    if (post.landscape?.sound) return post;
+    const start = slots[next++] ?? Math.min(196, 16 + index * 7);
+    const topic = post.categories?.[0] || post.tags?.[0] || '研究笔记';
+    const label = post.title.length > 18 ? `${post.title.slice(0, 18)}…` : post.title;
+    return { ...post, landscape: {
+      label, region: topic, color: colors[index % colors.length],
+      frequency: .18 + ((index * 7) % 10) * .068,
+      theme: 'spectrum', autoRidge: true,
+      sound: { start, end: Math.min(204.6, start + 5.8), title: '一段流动的山脊',
+        note: '这篇笔记随这一段声音经过。点亮山脊，继续阅读。' },
+    } };
+  });
+}
+
 // The library and reading history share article identities with the immersive soundscape.
 export class StoryLandscape {
   constructor({terrain,root, reduced = false, schedule}) {
     this.terrain=terrain;this.root=root;this.reduced=reduced;this.schedule=schedule;
-    this.entries=[];this.topic='全部';this.year='全部';this.query='';this.searchIndex=null;this.indexPending=false;this.indexFailures=0;this.current='';this.progress=0;this.scrollFrame=0;
+    this.entries=[];this.topic='全部';this.current='';this.progress=0;this.scrollFrame=0;
     try { const saved=JSON.parse(localStorage.getItem(STORAGE)||'{}');this.history=saved&&typeof saved==='object'&&!Array.isArray(saved)?saved:{}; } catch { this.history={}; }
     this.start().catch(()=>{});
   }
@@ -17,9 +40,8 @@ export class StoryLandscape {
     if(!Array.isArray(window.POSTS))await import('./posts.js');
     if(!window.renderCards)await import('./site.js');
     // Keep the source order for the soundscape's spatial article layout; the library cards sort separately.
-    this.posts=window.POSTS;
+    this.posts=withLandscapeCoordinates(window.POSTS);
     this.entries=this.posts.map((post,index)=>({post,index,map:post.landscape||{label:post.title,region:post.tags[0],color:'#a1f9d5'},visible:true}));
-    this.topics=['全部',...new Set(this.entries.map(entry=>entry.map.region))];
     if(this.terrain){this.sceneLinks=new TerrainStories({terrain:this.terrain,entries:this.entries,root:this.root,reduced:this.reduced,schedule:this.schedule,progress:slug=>this.history[slug]?.progress||0});this.orbit=this.sceneLinks.orbit;}
     this.readingStatus=document.createElement('aside');this.readingStatus.id='story-reading-status';this.readingStatus.hidden=true;document.body.appendChild(this.readingStatus);
     this.journey=new StoryJourney(this);
@@ -32,13 +54,7 @@ export class StoryLandscape {
     document.addEventListener('blog:cards-ready',()=>this.applyFilter());
     document.addEventListener('click',event=>{
       const button=event.target.closest('.journal-filters [data-topic]');
-      if(button){this.topic=button.dataset.topic;this.applyFilter();}
-    });
-    document.addEventListener('input',event=>{
-      if(event.target.matches('#notes-search')){this.query=event.target.value.trim();this.applyFilter();if(this.query)this.ensureSearchIndex();}
-    });
-    document.addEventListener('change',event=>{
-      if(event.target.matches('#notes-year')){this.year=event.target.value||'全部';this.applyFilter();}
+      if(button){this.topic=button.dataset.topic||'全部';this.applyFilter();}
     });
     const scroll=()=>{if(this.scrollFrame)return;this.scrollFrame=requestAnimationFrame(()=>{this.scrollFrame=0;this.updateProgress();});};
     window.addEventListener('scroll',scroll,{passive:true});window.addEventListener('resize',scroll);
@@ -47,60 +63,17 @@ export class StoryLandscape {
   }
   applyFilter(){
     if(!this.posts)return;
-    const query=this.query.toLocaleLowerCase('zh-CN');
     this.entries.forEach(entry=>{
-      const topicMatches=this.topic==='全部'||entry.map.region===this.topic;
-      const yearMatches=this.year==='全部'||entry.post.date.slice(0,4)===this.year;
-      const metadata=[entry.post.title,entry.post.excerpt,...entry.post.tags].join(' ').toLocaleLowerCase('zh-CN');
-      const searchable=query?`${metadata} ${this.searchIndex?.get(entry.post.slug)||''}`:'';
-      entry.visible=topicMatches;
-      entry.libraryVisible=topicMatches&&yearMatches&&(!query||searchable.includes(query));
+      const postTopics=entry.post.categories?.length?entry.post.categories:entry.post.tags?.slice(0,1)||[];
+      entry.visible=this.topic==='全部'||postTopics.includes(this.topic);
     });
     document.querySelectorAll('.card[data-post-slug]').forEach(card=>{
-      const entry=this.entries.find(item=>item.post.slug===card.dataset.postSlug),saved=this.history[card.dataset.postSlug];
-      card.hidden=!!entry&&!entry.libraryVisible;card.classList.toggle('story-visited',!!saved);
+      const entry=this.entries.find(item=>item.post.slug===card.dataset.postSlug);
+      card.classList.toggle('story-visited',!!this.history[card.dataset.postSlug]);
       if(entry)card.style.setProperty('--story-color',entry.map.color);
     });
-    const heading=document.querySelector('main.notes-library .journal-heading');
-    if(heading&&!heading.closest('.fx-shard')){
-      const count=this.entries.filter(entry=>entry.visible).length;
-      heading.querySelector('.journal-topic').textContent=`${this.topic} / ${count} 篇`;
-      let filters=document.querySelector('main.notes-library .journal-filters');
-      if(!filters){
-        filters=document.createElement('div');filters.className='journal-filters';filters.setAttribute('role','group');filters.setAttribute('aria-label','筛选研究笔记');
-        for(const topic of this.topics){const button=document.createElement('button');button.textContent=topic;button.dataset.topic=topic;filters.appendChild(button);}heading.after(filters);
-      }
-      filters.querySelectorAll('[data-topic]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.topic===this.topic)));
-    }
-    const yearSelect=document.querySelector('#notes-year');
-    if(yearSelect){
-      const years=[...new Set(this.posts.map(post=>post.date.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
-      yearSelect.innerHTML='<option value="全部">全部年份</option>'+years.map(year=>`<option value="${year}">${year}</option>`).join('');
-      yearSelect.value=this.year;
-    }
-    const searchInput=document.querySelector('#notes-search');if(searchInput&&searchInput.value!==this.query)searchInput.value=this.query;
-    const count=this.entries.filter(entry=>entry.libraryVisible).length;
-    const status=document.querySelector('#notes-results-status');
-    if(status){
-      status.textContent=this.indexPending&&query?'正在搜索标题、摘要、标签和正文…':this.indexFailures&&query?`找到 ${count} 篇；部分正文暂时无法读取，仍可搜索标题、摘要和标签。`:`找到 ${count} 篇笔记`;
-    }
-    const empty=document.querySelector('#notes-empty');if(empty)empty.hidden=count>0;
+    this.orbit?.updateControls();
     this.updateResume();
-  }
-  ensureSearchIndex(){
-    if(this.searchIndex||this.indexPending)return;
-    this.indexPending=true;this.applyFilter();
-    return Promise.all(this.posts.map(async post=>{
-      try{
-        const response=await fetch(this.href(post),{credentials:'same-origin'});
-        if(!response.ok)throw new Error(`HTTP ${response.status}`);
-        const doc=new DOMParser().parseFromString(await response.text(),'text/html');
-        const body=(doc.querySelector('.article')?.textContent||'').replace(/\\s+/g,' ').toLocaleLowerCase('zh-CN');
-        return [post.slug,body];
-      }catch{return [post.slug,''];}
-    })).then(results=>{
-      this.searchIndex=new Map(results);this.indexFailures=results.filter(([,body])=>!body).length;this.indexPending=false;this.applyFilter();
-    }).catch(()=>{this.searchIndex=new Map();this.indexFailures=this.posts.length;this.indexPending=false;this.applyFilter();});
   }
   updateResume(){
     const recent=this.posts.map(post=>({post,saved:this.history[post.slug]})).filter(item=>item.saved?.progress>.03&&item.saved.progress<.96).sort((a,b)=>b.saved.updatedAt-a.saved.updatedAt)[0];

@@ -45,7 +45,7 @@ export class TerrainStories{
     this.hovered=slug;const focused=this.entries.find(entry=>entry.visible&&entry.inFlow&&entry.post.slug===(slug||this.selected));this.terrain.setStoryFocus(this.active&&focused?this.focusMap(focused):null);this.schedule();
   }
   pulse(entry){if(this.active)this.terrain.particles.emit(entry.point,{burst:true,energy:.65});this.schedule();}
-  focusMap(entry){return {...entry.map,frequency:entry.map.frequency??(.25+entry.index*.13),depth:entry.flowDepth};}
+  focusMap(entry){return {...entry.map,frequency:entry.ridgeFrequency??entry.map.frequency??(.25+entry.index*.13),depth:entry.flowDepth};}
   recall(entry){
     const terrain=this.terrain;if(!terrain.spectrum){this.pendingRecall=entry;return;}
     if(this.flowSpectrum!==terrain.spectrum){this.flowSpectrum=terrain.spectrum;this.entries.forEach(item=>delete item.flowOverride);}
@@ -62,9 +62,19 @@ export class TerrainStories{
     if(entry.flowOverride!==undefined&&(sourceStart>entry.flowOverride+.01||sourceStart<entry.flowOverride-terrain.windowSize*1.2))delete entry.flowOverride;
     const source=entry.flowOverride??base;
     const time=terrain.outputTime?terrain.outputTime(source):source,depth=(time-terrain.windowStart)/terrain.windowSize;
+    if(entry.map.autoRidge&&(entry.ridgeSpectrum!==terrain.spectrum||entry.ridgeSource!==source)){
+      const guide=entry.map.frequency;let best=guide,score=-Infinity;
+      for(let step=-3;step<=3;step++){
+        const candidate=THREE.MathUtils.clamp(guide+step*.022,.12,.88);
+        const candidateScore=terrain.height(time,candidate)-Math.abs(step)*.08;
+        if(candidateScore>score){score=candidateScore;best=candidate;}
+      }
+      entry.ridgeFrequency=best;entry.ridgeSpectrum=terrain.spectrum;entry.ridgeSource=source;
+    }
+    const ridgeU=entry.map.autoRidge?entry.ridgeFrequency:u;
     entry.flowTime=time;entry.flowSourceTime=source;entry.flowDepth=depth;entry.inFlow=source>=0&&source<duration&&depth>=0&&depth<=1;
     entry.flowAlpha=entry.inFlow?Math.min(1,depth/.075,(1-depth)/.1)*(1-(terrain.codaLevel||0)):0;
-    entry.point.set((u-.5)*terrain.width,terrain.height(time,u),terrain.front-depth*terrain.depth);
+    entry.point.set((ridgeU-.5)*terrain.width,terrain.height(time,ridgeU),terrain.front-depth*terrain.depth);
   }
   locate(slug){const entry=this.entries.find(item=>item.post.slug===slug);if(!entry)return;entry.visible=true;this.orbit.bringForward(entry);}
   setActive(active){if(active&&!this.active)this.orbit?.resize(true);this.active=active;this.host.hidden=!active;this.ridges.hidden=!active;this.dock.hidden=!active;if(!active){this.hovered='';if(!this.terrain.reading)this.terrain.setStoryFocus(null);}}
@@ -104,8 +114,17 @@ export class TerrainStories{
       const visible=this.active&&entry.visible&&entry.inFlow&&entry.flowAlpha>.08&&(!entry.ridgeCovered||focused)&&this.projected.z>0&&this.projected.z<1&&x>20&&x<innerWidth-20&&y>(innerWidth<760?344:80)&&y<innerHeight-(innerWidth<760?230:145);
       if(!visible&&entry.ridge.contains(document.activeElement))this.dock.querySelector('#orbit-next').focus({preventScroll:true});
       entry.ridge.hidden=!visible;entry.ridge.tabIndex=visible?0:-1;
-      if(visible){entry.ridge.style.opacity=entry.flowAlpha;entry.ridge.style.left=`${x}px`;entry.ridge.style.top=`${y}px`;entry.ridge.classList.toggle('label-left',x>innerWidth*.66);}
+      if(visible){entry.ridge.style.opacity=entry.flowAlpha;entry.ridge.style.left=`${x}px`;entry.ridge.style.top=`${y}px`;entry.ridge.classList.toggle('label-left',x>innerWidth*.66);entry.ridge.classList.toggle('label-above',innerWidth<760&&y>innerHeight*.55);}
     });
     this.orbit.update(now,{editing,hovered:focus?.post.slug||'',current,active:this.active,showCards:this.showCards});
+    // A visible card is the link for its peak; keep the ridge target underneath it.
+    this.entries.forEach(entry=>{
+      if(!entry.orbitObject.visible||entry.ridge.hidden)return;
+      if(entry.ridge.contains(document.activeElement))entry.anchor.focus({preventScroll:true});
+      entry.ridge.hidden=true;entry.ridge.tabIndex=-1;
+    });
+    const featured=innerWidth<760&&this.showCards&&!this.entries.some(entry=>entry.orbitObject.visible)
+      ?this.entries.filter(entry=>!entry.ridge.hidden).sort((a,b)=>Math.abs(a.flowDepth-.5)-Math.abs(b.flowDepth-.5))[0]:null;
+    this.entries.forEach(entry=>entry.ridge.classList.toggle('is-featured',entry===featured));
   }
 }

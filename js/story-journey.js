@@ -46,7 +46,7 @@ export class StoryJourney{
     if(!this.post)return;
     const source=this.terrain?.spectrum;if(this.cueSource===source&&this.cueReady)return;this.cueSource=source;this.cueReady=true;
     const cue=soundCue(this.post,source),box=this.panel.querySelector('.scene-reading-cue');
-    box.querySelector('span').textContent=`${cue.range} / 作者选取的声音坐标`;box.querySelector('h2').textContent=cue.title;box.querySelector('p').textContent=cue.note;
+    box.querySelector('span').textContent=`${cue.range} / ${this.post.landscape?.autoRidge?'这篇笔记的山脊坐标':'作者选取的声音坐标'}`;box.querySelector('h2').textContent=cue.title;box.querySelector('p').textContent=cue.note;
   }
   setFocus(focused){
     this.focused=focused;document.body.classList.toggle('reading-focus',focused);

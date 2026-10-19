@@ -16,8 +16,9 @@ export class ArticleOrbit {
     this.width=320;this.height=208;this.unit=.026;
     const layout=[[-.85,6],[-2.45,8],[2.35,10],[.85,7]],sideOffsets=[3,-6,7,-5],depthOffsets=[-6,-4,3,5];
     entries.forEach((entry,index)=>{
-      const [angle,elevation]=layout[index]||[-Math.PI+TAU*index/entries.length,8+(index%2)*2];
-      const cardOffsetX=sideOffsets[index]??(index%2?5:-5),cardOffsetZ=depthOffsets[index]??0;
+      const auto=!!entry.map.autoRidge;
+      const [angle,elevation]=auto?[index%2?.08:-.08,6.4+(index%2)*.8]:layout[index]||[-Math.PI+TAU*index/entries.length,8+(index%2)*2];
+      const cardOffsetX=auto?(index%2?3.6:-3.6):sideOffsets[index]??(index%2?5:-5),cardOffsetZ=auto?-1.8:depthOffsets[index]??0;
       const object=new CSS3DObject(entry.anchor);object.position.set(((entry.map.frequency??.5)-.5)*terrain.width+cardOffsetX,elevation,terrain.front-(entry.map.depth??.5)*terrain.depth+cardOffsetZ);
       object.rotation.set(-.06,angle,Math.sin(angle)*-.025);object.scale.setScalar(this.unit);this.scene.add(object);
       const frame=new THREE.Mesh(new THREE.BoxGeometry(this.width*this.unit+.08,this.height*this.unit+.08,.10),new THREE.MeshStandardMaterial({color:0x12342f,roughness:.6,metalness:.4,transparent:true,opacity:.6}));
@@ -49,7 +50,14 @@ export class ArticleOrbit {
   }
   updateControls(){
     const visible=this.visibleEntries();if(!this.label)return;
-    let selected=this.entries[this.active];if(!selected?.visible){selected=visible[0];if(selected)this.active=selected.index;}
+    let selected=this.entries[this.active];
+    if(!this.lifted){
+      const passing=visible.filter(entry=>entry.inFlow&&entry.flowAlpha>.08);
+      const onScreen=passing.filter(entry=>entry.ridge&&!entry.ridge.hidden);
+      const candidate=(onScreen.length?onScreen:passing).sort((a,b)=>Math.abs(a.flowDepth-.5)-Math.abs(b.flowDepth-.5))[0];
+      if(candidate){selected=candidate;this.active=candidate.index;}
+    }
+    if(!selected?.visible){selected=visible[0];if(selected)this.active=selected.index;}
     this.previous.disabled=this.next.disabled=visible.length<2;
     const text=selected?`${String(visible.indexOf(selected)+1).padStart(2,'0')} / ${String(visible.length).padStart(2,'0')} · ${selected.map.label}`:'文章环廊';
     if(this.label.textContent!==text)this.label.textContent=text;
@@ -82,10 +90,15 @@ export class ArticleOrbit {
     return covered===samples.length;
   }
   update(now,{editing,hovered,current,active=true,showCards=true}){
-    this.resize();
+    this.resize();this.updateControls();
     if(this.animation&&!editing&&!current&&active){const animation=this.animation,t=animation.duration?Math.min(1,(now-animation.at)/animation.duration):1,eased=1-(1-t)**3;this.terrain.orbit(animation.from+(animation.to-animation.from)*eased,animation.pitch+(.28-animation.pitch)*eased);if(t===1)this.animation=null;}
     const occlusion=now-this.lastOcclusion>280;if(occlusion)this.lastOcclusion=now;
     const camera=this.terrain.camera,galleryVisible=active&&showCards&&!editing&&!current;
+    const cardLimit=innerWidth<760?1:3;
+    const featured=new Set(this.entries.filter(entry=>entry.visible&&entry.inFlow&&entry.flowAlpha>.08)
+      .sort((a,b)=>((b.post.slug===hovered?3:0)+(b.index===this.active&&this.lifted?2:0)-Math.abs(b.flowDepth-.5))
+        -((a.post.slug===hovered?3:0)+(a.index===this.active&&this.lifted?2:0)-Math.abs(a.flowDepth-.5)))
+      .slice(0,cardLimit));
     this.entries.forEach(entry=>{
       const focused=entry.post.slug===hovered,selected=entry.index===this.active,object=entry.orbitObject;
       // The same timeline-to-world mapping moves the actual mountain, article marker and card.
@@ -94,15 +107,20 @@ export class ArticleOrbit {
       const lift=selected&&this.lifted?1.5:0,targetY=Math.max(entry.orbitElevation,this.terrain.height(time,u)+3.5)+lift+(focused ? .4 : 0);
       object.position.y=this.reduced?targetY:THREE.MathUtils.lerp(object.position.y,targetY,.13);
       const depth=Math.max(1,-this.sample.copy(object.position).applyMatrix4(camera.matrixWorldInverse).z),pixelsPerUnit=innerHeight*.5*camera.projectionMatrix.elements[5]/depth;
-      const maxWidth=innerWidth<760?245:360,scale=this.unit*(focused?1.035:1)*Math.min(1,maxWidth/(this.width*this.unit*pixelsPerUnit));
+      const maxWidth=innerWidth<760?245:360,minWidth=innerWidth<760?175:200;
+      const projectedWidth=this.width*this.unit*pixelsPerUnit;
+      const fit=Math.min(1.8,THREE.MathUtils.clamp(projectedWidth,minWidth,maxWidth)/projectedWidth);
+      const scale=this.unit*(focused?1.035:1)*fit;
       object.lookAt(camera.position);object.rotateZ(Math.sin(entry.orbitAngle)*.025);object.rotateX(-.035);
       object.scale.setScalar(scale);object.updateMatrixWorld();
       // Explicit face selection also avoids mirrored text bleeding through translucent CSS planes.
       this.sample.copy(camera.position);object.worldToLocal(this.sample);entry.anchor.classList.toggle('is-back-facing',this.sample.z<0);
-      const point=object.position.clone().project(camera),inView=point.z>0&&point.z<1&&Math.abs(point.x)<1.4&&Math.abs(point.y)<1.35;
+      const point=object.position.clone().project(camera),screenY=(1-point.y)*innerHeight*.5;
+      const mobileSafe=innerWidth>=760||(screenY>390&&screenY<innerHeight-220);
+      const inView=point.z>0&&point.z<1&&Math.abs(point.x)<1.4&&Math.abs(point.y)<1.35&&mobileSafe;
       if(occlusion&&inView&&galleryVisible&&entry.visible&&entry.inFlow)entry.orbitOccluded=this.isCovered(entry);
       const reading=focused||(selected&&this.lifted);
-      object.visible=entry.visible&&entry.inFlow&&entry.flowAlpha>.03&&galleryVisible&&inView&&(!entry.orbitOccluded||reading);
+      object.visible=featured.has(entry)&&entry.flowAlpha>.03&&galleryVisible&&inView&&(!entry.orbitOccluded||reading);
       if(!object.visible&&entry.anchor.contains(document.activeElement))this.next?.focus({preventScroll:true});
       entry.anchor.classList.toggle('is-orbit-active',selected);entry.anchor.classList.remove('is-offscreen');
       entry.anchor.setAttribute('aria-hidden',String(!object.visible));entry.anchor.tabIndex=object.visible?0:-1;
