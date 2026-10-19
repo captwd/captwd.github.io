@@ -14,6 +14,7 @@
   let mode = 'random';
   try { mode = localStorage.getItem(MODE_KEY) || 'random'; } catch (e) {}
   let navLock = false;
+  let renderedPage=location.pathname+location.search;
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const pickMode = () => (mode === 'random' ? (Math.random() < 0.5 ? 'drop' : 'vortex') : mode);
@@ -310,6 +311,7 @@
       oldRegions[i].replaceWith(document.adoptNode(newRegions[i]));
     }
     document.title = doc.title;
+    const renderedURL=new URL(url,location.href);renderedPage=renderedURL.pathname+renderedURL.search;
     const oldHeader = document.querySelector('.site-head'), newHeader = doc.querySelector('.site-head');
     if (oldHeader && newHeader) oldHeader.replaceWith(document.adoptNode(newHeader));
     document.body.classList.toggle('ambient', doc.body.classList.contains('ambient'));
@@ -319,8 +321,9 @@
     document.dispatchEvent(new CustomEvent('blog:navigate', {detail: {url: new URL(url, location.href).href}}));
   }
 
-  async function quietSwap(url, textPromise, push) {
+  async function quietSwap(url, textPromise, push, preparation) {
     try {
+      if(preparation){const [html]=await Promise.all([textPromise,preparation]);textPromise=Promise.resolve(html);}
       await swapContent(url, textPromise);
       window.scrollTo({ top: 0, behavior: 'instant' });
       if (push) history.pushState({ fx: true }, '', url);
@@ -350,8 +353,11 @@
     // fetch 预取：与出场动画并行，置换时页面内容已在手上
     const textPromise = fetch(url.href, { headers: { 'X-Requested-With': 'onetake-transition' } })
       .then((r) => { if (!r.ok) throw new Error('fetch ' + r.status); return r.text(); });
+    const waits=[],story=a.closest('.story-orbit-card,.ridge-note');
+    if(story)document.dispatchEvent(new CustomEvent('blog:story-open',{detail:{slug:story.dataset.postSlug,waitUntil:promise=>waits.push(promise)}}));
+    if(waits.length){quietSwap(url.href,textPromise,true,Promise.all(waits));return;}
     // Module switches keep the live terrain and use a direct swap, without fragmenting a full viewport.
-    if (reduceMotion || document.body.classList.contains('soundscape-home') || document.body.classList.contains('notes-page') || url.hash.startsWith('#story-') || /\/notes\/(?:index\.html)?$/.test(url.pathname)) { quietSwap(url.href, textPromise, true); return; }
+    if (reduceMotion || document.body.classList.contains('scene-reading') || document.body.classList.contains('soundscape-home') || document.body.classList.contains('notes-page') || url.hash.startsWith('#story-') || /\/notes\/(?:index\.html)?$/.test(url.pathname)) { quietSwap(url.href, textPromise, true); return; }
 
     (async () => {
       const m = pickMode();
@@ -385,9 +391,10 @@
 
   // 后退/前进：快速淡出 → 置换 → 碎片拼合
   window.addEventListener('popstate', () => {
+    if(location.pathname+location.search===renderedPage)return;
     if (navLock) return;
     navLock = true;
-    if (reduceMotion || document.body.classList.contains('soundscape-home') || document.body.classList.contains('notes-page') || /\/notes\/(?:index\.html)?$/.test(location.pathname)) { quietSwap(location.href, null, false); return; }
+    if (reduceMotion || document.body.classList.contains('scene-reading') || document.body.classList.contains('soundscape-home') || document.body.classList.contains('notes-page') || /\/notes\/(?:index\.html)?$/.test(location.pathname)) { quietSwap(location.href, null, false); return; }
     (async () => {
       try {
         const els = collectTargets(document);

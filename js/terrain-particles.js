@@ -11,11 +11,11 @@ export class TerrainParticles {
     this.geometry = new THREE.BufferGeometry();
     for (const [name, array, size] of [['position', this.positions, 3], ['aLife', this.life, 1], ['aSize', this.sizes, 1], ['color', this.colors, 3]]) this.geometry.setAttribute(name, new THREE.BufferAttribute(array, size).setUsage(THREE.DynamicDrawUsage));
     const material = new THREE.ShaderMaterial({transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, vertexColors: true,
-      uniforms: {pixelRatio: {value: Math.min(devicePixelRatio || 1, 1.5)}},
+      uniforms: {pixelRatio: {value: Math.min(devicePixelRatio || 1, 1.5)},fade:{value:1}},
       vertexShader: `attribute float aLife; attribute float aSize; varying float life; varying vec3 tint; uniform float pixelRatio;
         void main(){life=aLife;tint=color;vec4 p=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*p;gl_PointSize=clamp(aSize*1100./max(1.,-p.z),1.,22.)*pixelRatio;}`,
-      fragmentShader: `varying float life; varying vec3 tint;
-        void main(){float r=length(gl_PointCoord-.5)*2.;float glow=exp(-r*r*5.);float core=1.-smoothstep(.05,.28,r);gl_FragColor=vec4(tint+core*.45,(glow*.65+core*.35)*life);}`
+      fragmentShader: `varying float life; varying vec3 tint;uniform float fade;
+        void main(){float r=length(gl_PointCoord-.5)*2.;float glow=exp(-r*r*5.);float core=1.-smoothstep(.05,.28,r);gl_FragColor=vec4(tint+core*.45,(glow*.65+core*.35)*life*fade);}`
     });
     this.points = new THREE.Points(this.geometry, material); this.points.frustumCulled = false; this.points.renderOrder = 8; scene.add(this.points);
     this.rings = [];

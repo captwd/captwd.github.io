@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {TerrainParticles} from './terrain-particles.js';
+import {TerrainNarrative} from './terrain-narrative.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -82,23 +83,38 @@ export class SoundTerrain {
       };
     }
     this.particles = new TerrainParticles(this.scene, {mobile, reduced});
+    this.narrative = new TerrainNarrative(this,{mobile,reduced});
     this.resize();
   }
   resize() {
     this.renderer.setSize(innerWidth, innerHeight, false);
-    this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix(); this.updateCamera();
+    const area=this.viewArea();this.camera.aspect=area.width/area.height;this.camera.updateProjectionMatrix();this.updateCamera();
   }
+  viewArea(){return !this.reading?{width:innerWidth,height:innerHeight,y:0}:innerWidth<900?{width:innerWidth,height:Math.min(220,innerHeight*.28),y:innerHeight-Math.min(220,innerHeight*.28)-64}:{width:Math.round(innerWidth*.39),height:innerHeight,y:0};}
+  setReading(state){this.reading=!!state;this.narrative.set(state);this.resize();}
+  view(){return {yaw:this.yaw,pitch:this.pitch,zoom:this.zoom,target:this.target.clone()};}
+  travelTo(view,duration=850){
+    if(this.reduced||!duration){this.yaw=view.yaw;this.pitch=view.pitch;this.zoom=view.zoom;this.target.copy(view.target);this.flight=null;this.updateCamera();return;}
+    const from=this.view(),yaw=from.yaw+THREE.MathUtils.euclideanModulo(view.yaw-from.yaw+Math.PI,Math.PI*2)-Math.PI;
+    this.flight={from,to:{...view,yaw},at:performance.now(),duration};
+  }
+  tickCamera(now){
+    const flight=this.flight;if(!flight)return;
+    const t=Math.min(1,(now-flight.at)/flight.duration),ease=t*t*(3-2*t);
+    for(const key of ['yaw','pitch','zoom'])this[key]=THREE.MathUtils.lerp(flight.from[key],flight.to[key],ease);
+    this.target.copy(flight.from.target).lerp(flight.to.target,ease);this.updateCamera();if(t===1)this.flight=null;
+  }
+  setCoda(active){this.coda=active?{at:performance.now()}:null;this.codaLevel=active&&this.reduced?1:0;}
   updateCamera() {
     const portrait = this.camera.aspect < 1;
-    this.target.y=portrait?6:4;
-    const distance = (portrait ? 63 : 49)*this.zoom;
+    const distance = (portrait&&!this.reading ? 63 : 49)*this.zoom;
     this.camera.position.set(this.target.x + Math.sin(this.yaw) * Math.cos(this.pitch) * distance, this.target.y + Math.sin(this.pitch) * distance, this.target.z + Math.cos(this.yaw) * Math.cos(this.pitch) * distance);
     this.camera.lookAt(this.target); this.camera.updateMatrixWorld();
   }
   orbit(yaw, pitch) { this.yaw = THREE.MathUtils.euclideanModulo(yaw+Math.PI,Math.PI*2)-Math.PI; this.pitch = clamp(pitch, .15, .7); this.updateCamera(); }
-  zoomBy(factor){this.zoom=clamp(this.zoom*factor,.8,1.65);this.updateCamera();}
+  zoomBy(factor){this.flight=null;this.zoom=clamp(this.zoom*factor,.8,1.65);this.updateCamera();}
   setStoryFocus(map){this.storyFocus=map;if(map){if(!this.storyColor)this.storyColor=new THREE.Color();this.storyColor.set(map.color);}}
-  resetView() { this.zoom=1;this.orbit(.28,.28); }
+  resetView() { this.flight=null;this.target.set(0,this.camera.aspect<1?6:4,-24);this.zoom=1;this.orbit(.28,.28); }
   // Bilinear sampling keeps the terrain moving smoothly between FFT frames.
   energy(time, frequencyUnit) {
     const s = this.spectrum;
@@ -116,11 +132,13 @@ export class SoundTerrain {
   height(time, u) {
     const step = 1 / (this.columns - 1);
     const e = this.energy(time, u) * .66 + this.energy(time, u - step) * .17 + this.energy(time, u + step) * .17;
-    return Math.pow(Math.max(0, e - .08) / .92, 1.3) * this.elevation;
+    return Math.pow(Math.max(0, e - .08) / .92, 1.3) * this.elevation*(1-(this.codaLevel||0)*.92);
   }
   update({spectrum, windowStart, windowSize, cursor, started, selection = null, showSelection = true, inputTime = null, outputTime = null, duration = spectrum?.duration}) {
     if (!spectrum) return;
+    if(this.coda){const t=this.reduced?1:Math.min(1,(performance.now()-this.coda.at)/6500);this.codaLevel=t*t*(3-2*t);}
     this.spectrum = spectrum; this.windowStart = windowStart; this.windowSize = windowSize;
+    this.started=started;this.cursor=cursor;
     this.selection = selection; this.inputTime = inputTime; this.outputTime = outputTime; this.duration = duration;
     for (let r = 0; r < this.rows; r++) {
       const time = windowStart + r / (this.rows - 1) * windowSize;
@@ -191,5 +209,10 @@ export class SoundTerrain {
     return this.raycaster.ray.at(40, new THREE.Vector3());
   }
   clearHover() { this.marker.visible = false; }
-  render(now = performance.now()) { this.particles.update(Math.min(.05, Math.max(0, (now - (this.lastRender || now)) / 1000))); this.lastRender = now; this.renderer.render(this.scene, this.camera); }
+  render(now = performance.now()) {
+    this.narrative.update(now);this.particles.update(Math.min(.05,Math.max(0,(now-(this.lastRender||now))/1000)));
+    this.particles.points.material.uniforms.fade.value=1-(this.codaLevel||0);this.lastRender=now;
+    for(const ring of this.particles.rings)ring.mesh.material.opacity*=1-(this.codaLevel||0);
+    const area=this.viewArea();this.renderer.setScissorTest(false);this.renderer.clear();this.renderer.setViewport(0,area.y,area.width,area.height);this.renderer.setScissor(0,area.y,area.width,area.height);this.renderer.setScissorTest(true);this.renderer.render(this.scene,this.camera);this.renderer.setScissorTest(false);
+  }
 }

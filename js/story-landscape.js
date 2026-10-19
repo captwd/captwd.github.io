@@ -1,4 +1,5 @@
 import {TerrainStories} from './terrain-stories.js';
+import {StoryJourney} from './story-journey.js';
 
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const escapeHTML = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -20,6 +21,7 @@ export class StoryLandscape {
     this.topics=['全部',...new Set(this.entries.map(entry=>entry.map.region))];
     if(this.terrain){this.sceneLinks=new TerrainStories({terrain:this.terrain,entries:this.entries,root:this.root,reduced:this.reduced,schedule:this.schedule,progress:slug=>this.history[slug]?.progress||0});this.orbit=this.sceneLinks.orbit;}
     this.readingStatus=document.createElement('aside');this.readingStatus.id='story-reading-status';this.readingStatus.hidden=true;document.body.appendChild(this.readingStatus);
+    this.journey=new StoryJourney(this);
     this.bind();this.onNavigate(location.href);this.schedule();
   }
   href(post,hash=''){return new URL(`posts/${post.slug}/${hash}`,this.root).href;}
@@ -69,6 +71,7 @@ export class StoryLandscape {
     this.saveHistory(true);this.current='';this.article=null;this.articleReady=false;this.headings=[];this.progress=0;
     const target=new URL(url,location.href),post=this.posts.find(item=>target.pathname.replace(/index\.html$/,'').endsWith(`/posts/${item.slug}/`));
     const home=!!document.querySelector('.sound-lab');
+    const restored=this.journey.leave(home,target);
     document.body.classList.toggle('soundscape-home',home);document.body.classList.toggle('notes-page',!!document.querySelector('main.notes-library'));
     const nav=document.querySelector('.site-nav');
     if(nav&&!nav.querySelector('[data-notes-nav]')){const link=document.createElement('a');link.href=this.libraryHref();link.dataset.notesNav='';link.textContent='研究笔记';nav.prepend(link);}
@@ -76,7 +79,7 @@ export class StoryLandscape {
     if(post&&document.querySelector('.article'))this.mountArticle(post,target);
     else this.readingStatus.hidden=true;
     this.applyFilter();this.sceneLinks?.setActive(home&&document.body.classList.contains('music-mode')&&document.body.classList.contains('sculpt-closed'));
-    if(home&&target.hash.startsWith('#story-')){this.topic='全部';this.applyFilter();this.sceneLinks?.locate(decodeURIComponent(target.hash.slice(7)));}
+    if(home&&target.hash.startsWith('#story-')){this.topic='全部';this.applyFilter();if(!restored)this.sceneLinks?.locate(decodeURIComponent(target.hash.slice(7)));}
     this.schedule();
   }
   mountArticle(post,url){
@@ -88,6 +91,7 @@ export class StoryLandscape {
     trail.innerHTML=`<div class="article-trail-head"><a href="${this.libraryHref()}">← 研究笔记</a><span>${escapeHTML(map?.region||post.tags[0])} / ${escapeHTML(map?.label||post.title)}</span><output class="article-read-percent">0%</output></div><div class="article-read-track"><i></i></div><div class="article-chapters">${this.headings.map((heading,index)=>`<a href="#${escapeHTML(heading.id)}"><span>${String(index+1).padStart(2,'0')}</span>${escapeHTML(heading.textContent)}</a>`).join('')}</div>`;
     hero.appendChild(trail);this.trail=trail;
     const returnToPeak=document.createElement('a');returnToPeak.className='article-scene-link';returnToPeak.href=`${this.root.href}#story-${post.slug}`;returnToPeak.textContent='在声音山脉里，定位这篇笔记 ↗';trail.appendChild(returnToPeak);
+    this.journey.mount(post);
     const siblings=this.posts.filter(item=>item.slug!==post.slug).sort((a,b)=>Number(b.landscape?.region===map?.region)-Number(a.landscape?.region===map?.region)).slice(0,2);
     const related=document.createElement('section');related.className='story-related';related.setAttribute('aria-label','继续阅读研究笔记');
     related.innerHTML=`<div class="story-related-head"><span>CONTINUE READING</span><a href="${this.libraryHref()}">全部研究笔记 ↗</a></div><h2>下一篇笔记。</h2><div>${siblings.map(item=>`<a href="${this.href(item)}"><small>${escapeHTML(item.landscape?.region||item.tags[0])}</small><strong>${escapeHTML(item.title)}</strong><span>继续阅读 ↗</span></a>`).join('')}</div>`;
@@ -95,11 +99,12 @@ export class StoryLandscape {
     this.readingStatus.innerHTML=`<a href="${this.root.href}#story-${post.slug}"><span class="reading-status-dot" style="--story-color:${map?.color||'#a1f9d5'}"></span><span>${escapeHTML(map?.label||post.title)}</span><output>0%</output><small>回到这座山峰 ↗</small></a>`;this.readingStatus.hidden=false;
     const saved=this.history[post.slug];this.history[post.slug]={progress:saved?.progress||0,heading:saved?.heading||'',updatedAt:Date.now()};
     // The page swap resets scroll after its navigate event; wait for that before recording progress.
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    const restoreReading=()=>requestAnimationFrame(()=>requestAnimationFrame(()=>{
       if(this.current!==post.slug||!this.article?.isConnected)return;
       if(url.hash){const id=decodeURIComponent(url.hash.slice(1));document.getElementById(id)?.scrollIntoView({behavior:'instant',block:'start'});}
       this.articleReady=true;this.updateProgress();
     }));
+    if(document.readyState==='complete')restoreReading();else window.addEventListener('load',restoreReading,{once:true});
   }
   updateProgress(){
     if(!this.articleReady||!this.current||!this.article?.isConnected)return;
@@ -109,6 +114,7 @@ export class StoryLandscape {
     const percent=Math.round(this.progress*100);
     this.trail.querySelector('.article-read-percent').textContent=`${percent}%`;this.trail.querySelector('.article-read-track i').style.width=`${percent}%`;
     this.trail.querySelectorAll('.article-chapters a').forEach(link=>link.classList.toggle('active',link.hash===`#${currentHeading}`));
+    this.journey.chapterChanged(currentHeading,this.progress);this.schedule();
     this.readingStatus.querySelector('output').textContent=`${percent}%`;
     const saved=this.history[this.current]||{},furthest=Math.max(saved.progress||0,this.progress);
     this.history[this.current]={progress:furthest,heading:this.progress>=(saved.progress||0)?currentHeading:saved.heading||'',updatedAt:Date.now()};this.saveHistory();
@@ -117,6 +123,6 @@ export class StoryLandscape {
     if(!force&&performance.now()-(this.lastSave||0)<400)return;
     this.lastSave=performance.now();try{localStorage.setItem(STORAGE,JSON.stringify(this.history));}catch{}
   }
-  update(now){this.sceneLinks?.update(now,{active:document.body.classList.contains('soundscape-home')&&document.body.classList.contains('music-mode'),editing:!document.body.classList.contains('sculpt-closed'),current:this.current});}
+  update(now){this.sceneLinks?.update(now,{active:document.body.classList.contains('soundscape-home')&&document.body.classList.contains('music-mode'),editing:!document.body.classList.contains('sculpt-closed'),current:this.current});this.journey?.frame(now);}
 }
 

@@ -1,6 +1,7 @@
 import { SoundTerrain } from './sound-terrain.js';
 import { SculptedAudio } from './sculpted-audio.js';
 import { StoryLandscape } from './story-landscape.js';
+import {ListeningFinale} from './listening-finale.js';
 
 const ROOT = new URL('../', import.meta.url);
 const SOURCE = 'https://commons.wikimedia.org/wiki/File:Gymnopedie_No._1..ogg';
@@ -17,7 +18,7 @@ export class MusicScene {
     this.windowStart = 0; this.windowSize = 32; this.previewEpoch = performance.now(); this.lastFrame = 0; this.raf = 0; this.lastTimeText = '';
     this.wasPlaying = false; this.objectURL = null; this.uploadId = 0;
     this.tool = 'select'; this.selection = null; this.editJob = 0; this.windowPinned = false; this.sculptClosed = false;
-    this.mount(); this.initializeScene(); this.bind(); this.loadPreset(); this.setEditor(false);
+    this.mount();this.finale=new ListeningFinale({audio:this.audio,canStart:()=>this.ready&&!this.editor&&!this.audition&&document.body.classList.contains('soundscape-home')});this.initializeScene(); this.bind(); this.loadPreset(); this.setEditor(false);
     this.setSculptOpen(false);this.stories=new StoryLandscape({terrain:this.terrain,root:ROOT,reduced:this.reduced,schedule:()=>this.schedule()});
   }
   mount() {
@@ -28,7 +29,7 @@ export class MusicScene {
     const legend = document.createElement('div'); legend.id = 'music-terrain-legend'; legend.innerHTML = '<span>SOUND / TOPOGRAPHY</span><div>横向频率 <i>×</i> 纵深时间 <i>×</i> 山高能量</div>'; document.body.appendChild(legend);
     const viewTools=document.createElement('div');viewTools.id='music-view-tools';viewTools.setAttribute('aria-label','山脉视距');viewTools.innerHTML='<span>视距</span><button id="music-zoom-out" aria-label="拉远山脉视角">−</button><button id="music-zoom-in" aria-label="拉近并放大山脉">＋</button>';document.body.appendChild(viewTools);this.viewTools=viewTools;
     const player = document.createElement('section'); player.id = 'music-player'; player.setAttribute('aria-label','背景音乐播放器');
-    player.innerHTML = `<audio id="background-audio" preload="auto" loop hidden></audio>
+    player.innerHTML = `<audio id="background-audio" preload="auto" hidden></audio>
       <button id="music-play" class="music-play" aria-label="播放背景音乐" disabled>${PLAY}</button>
       <div class="music-track"><div><span class="music-track-label">NOW PLAYING</span><span id="music-state" role="status" aria-live="polite">正在准备音乐</span></div><strong id="music-title">Gymnopédie No.1</strong><a id="music-credit" href="${SOURCE}" target="_blank" rel="noopener">Erik Satie · 钢琴 / CC0 ↗</a></div>
       <div class="music-timeline"><div><span id="music-position">0:00</span><span id="music-duration">3:25</span></div><input id="music-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="背景音乐播放进度" disabled></div>
@@ -77,7 +78,7 @@ export class MusicScene {
       const responses=await Promise.all(['audio/gymnopedie-no1.peaks.json','audio/gymnopedie-no1.terrain.json'].map(path=>fetch(new URL(path,ROOT))));
       if(responses.some(response=>!response.ok))throw new Error('音乐山脉读取失败');
       const [data,spectrum]=await Promise.all(responses.map(response=>response.json()));if(token!==this.uploadId)return;
-      spectrum.values=Uint8Array.from(atob(spectrum.data),character=>character.charCodeAt(0));delete spectrum.data;this.spectrum=spectrum;
+      spectrum.values=Uint8Array.from(atob(spectrum.data),character=>character.charCodeAt(0));delete spectrum.data;spectrum.custom=false;this.spectrum=spectrum;
       const oldURL=this.objectURL;this.audio.pause();this.audio.src=new URL('audio/gymnopedie-no1.mp3',ROOT).href;this.audio.load();if(oldURL)URL.revokeObjectURL(oldURL);this.objectURL=null;
       this.selection=null;this.editJob++;this.windowPinned=false;this.data=data;this.audio.knownDuration=data.duration;this.windowSize=Math.min(32,data.duration);this.ready=true;this.previewEpoch=performance.now();this.custom=false;
       this.controls['music-title'].textContent='Gymnopédie No.1';this.controls['music-credit'].textContent='Erik Satie · Teknopazzo / CC0 ↗';this.controls['music-credit'].href=SOURCE;this.controls['music-credit'].hidden=false;this.controls['music-preset'].hidden=true;
@@ -95,7 +96,7 @@ export class MusicScene {
       if(buffer.duration>600)throw new Error('请使用 10 分钟以内的音乐');
       const pcm=buffer.getChannelData(0),bins=Math.min(36000,Math.max(1,Math.ceil(buffer.duration*60))),low=new Float32Array(bins),high=new Float32Array(bins),rms=new Float32Array(bins);let peak=.001;
       for(let b=0;b<bins;b++){const begin=Math.floor(b*pcm.length/bins),end=Math.max(begin+1,Math.floor((b+1)*pcm.length/bins));let sum=0;for(let i=begin;i<end;i++){low[b]=Math.min(low[b],pcm[i]);high[b]=Math.max(high[b],pcm[i]);sum+=pcm[i]*pcm[i];}rms[b]=Math.sqrt(sum/(end-begin));peak=Math.max(peak,-low[b],high[b]);}
-      const spectrum=await this.analyze(buffer,token);if(token!==this.uploadId)return;
+      const spectrum=await this.analyze(buffer,token);if(token!==this.uploadId)return;spectrum.custom=true;
       this.audio.pause();const oldURL=this.objectURL;this.objectURL=URL.createObjectURL(file);this.audio.src=this.objectURL;this.audio.load();if(oldURL)URL.revokeObjectURL(oldURL);
       this.selection=null;this.editJob++;this.windowPinned=false;this.data={duration:buffer.duration,bins,peak,low,high,rms};this.audio.knownDuration=buffer.duration;this.spectrum=spectrum;this.windowSize=Math.min(32,buffer.duration);this.ready=true;this.started=false;this.custom=true;this.previewEpoch=performance.now();
       this.controls['music-title'].textContent=file.name;this.controls['music-credit'].hidden=true;this.controls['music-preset'].hidden=false;this.report('本地音乐已就绪');this.sync();this.schedule();
@@ -104,14 +105,17 @@ export class MusicScene {
   report(text){this.controls['music-state'].textContent=text;}
   async play(from) {
     if(!this.ready)return;
+    this.storyCueEnd=null;
     this.editJob++;this.controls['sculpt-audition'].disabled=false;
     this.windowPinned=false;this.audition=false;
     if(typeof from==='number')this.audio.currentTime=clamp(from,0,Math.max(0,(this.audio.duration||this.data.duration)-.02));
+    else if(this.audio.currentTime>=this.duration()-.02)this.audio.currentTime=0;
+    this.finale.preparePlay();
     try{await this.audio.play();if(this.audio.paused||this.editor)return;this.started=true;this.report('正在播放');this.sync();this.schedule();}
     catch{this.report('点播放按钮开启音乐');this.sync();}
   }
   toggle(){if(this.audio.paused)this.play();else{this.audio.pause();this.report('已暂停');this.sync();}}
-  seek(time,play=false){if(!this.ready)return;this.started=true;this.audio.currentTime=clamp(time,0,Math.max(0,(this.audio.duration||this.data.duration)-.02));if(play)this.play();this.sync();this.schedule();}
+  seek(time,play=false){if(!this.ready)return;this.storyCueEnd=null;this.started=true;this.audio.currentTime=clamp(time,0,Math.max(0,(this.audio.duration||this.data.duration)-.02));if(play)this.play();this.sync();this.schedule();}
   setEditor(editor) {
     this.editor=editor;
     if(editor){this.editJob++;this.controls['sculpt-audition'].disabled=false;this.wasPlaying=!this.audio.paused;this.audio.pause();this.report('实验室中 · 音乐暂停');}
@@ -138,6 +142,8 @@ export class MusicScene {
     this.tickUI();
   }
   tickUI() {
+    this.finale?.sample();
+    if(this.storyCueEnd!==null&&this.storyCueEnd!==undefined&&this.audio.currentTime>=this.storyCueEnd){this.storyCueEnd=null;this.audio.pause();this.report('乐句试听结束');}
     const time=this.audio.currentTime||0,text=clockText(time);if(text!==this.lastTimeText){this.controls['music-position'].textContent=text;this.lastTimeText=text;}
     if(document.activeElement!==this.controls['music-seek'])this.controls['music-seek'].value=this.duration()?time/this.duration()*1000:0;
     this.controls['music-seek'].setAttribute('aria-valuetext',`${clockText(time)} / ${clockText(this.duration())}`);
@@ -162,6 +168,11 @@ export class MusicScene {
     this.audio.addEventListener('pause',()=>{if(!this.editor)this.report('已暂停');if(this.audition){this.audition=false;this.controls['sculpt-status'].textContent='选段试听已停止 · 整曲播放会保留这次变形';}this.sync();this.schedule();});
     this.audio.addEventListener('loadedmetadata',()=>{this.sync();this.schedule();});
     this.audio.addEventListener('timeupdate',()=>this.tickUI());
+    this.audio.addEventListener('ended',()=>{
+      if(this.editor||!this.ready){this.finale.invalidate();return;}
+      if(this.finale.finish()){this.report('一曲终了');this.sync();this.schedule();}
+      else {this.audio.currentTime=0;this.play();}
+    });
     this.audio.addEventListener('error',()=>{this.report('音乐读取失败，可重新选择或导入');this.controls['music-preset'].hidden=false;});
     this.field.addEventListener('pointerdown',event=>this.pointerDown(event));
     this.field.addEventListener('pointerup',event=>this.pointerUp(event));
@@ -219,6 +230,13 @@ export class MusicScene {
     document.addEventListener('blog:lab-playing',()=>{this.audio.pause();this.sync();});
     document.addEventListener('blog:sculpt-request',event=>{if(this.editor)this.setEditor(false);this.setSculptOpen(event.detail.open);});
     document.addEventListener('blog:open-lab',()=>this.openEditor());
+    document.addEventListener('blog:listen-cue',async event=>{
+      if(!this.ready){this.report('音乐准备中，请稍后试听');return;}
+      const version=this.audio.version,token=(this.listenToken||0)+1;this.listenToken=token;
+      await this.play(this.audio.outputTime(event.detail.start));
+      if(version===this.audio.version&&token===this.listenToken&&!this.audio.paused){this.storyCueEnd=this.audio.outputTime(event.detail.end);this.report('正在试听文章的乐句');}
+    });
+    document.addEventListener('blog:finale',event=>{this.terrain?.setCoda(event.detail.active);this.schedule();});
     document.addEventListener('blog:navigate',()=>{if(this.pendingEditor){this.pendingEditor=false;this.setEditor(true);}else if(document.body.classList.contains('ambient')){const restore=this.editor&&this.wasPlaying;this.setEditor(false);if(restore)this.play();}else document.body.classList.toggle('music-mode',!this.editor);this.updateReading();this.schedule();});
     document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(this.raf);this.raf=0;}else this.schedule();});
     window.addEventListener('resize',()=>this.resize());window.addEventListener('pagehide',()=>{this.audio.pause();cancelAnimationFrame(this.raf);this.cancelAnalysis();if(this.objectURL)URL.revokeObjectURL(this.objectURL);});
@@ -299,6 +317,7 @@ export class MusicScene {
   }
   pointerDown(event,edge=null) {
     if(event.button!==0||!this.ready||this.down||document.body.classList.contains('terrain-reading'))return;
+    if(this.terrain)this.terrain.flight=null;
     const hit=this.timeAt(event.clientX,event.clientY),tool=this.sculptClosed?'orbit':this.tool;
     if(tool==='orbit')this.stories?.orbit?.cancelMotion();
     if(tool!=='orbit'&&!edge&&!hit)return;
@@ -392,7 +411,7 @@ export class MusicScene {
       if (!this.started && !this.reduced) { const span = Math.max(0, duration - this.windowSize); this.windowStart = span ? ((now - this.previewEpoch) / 1000 * .65) % span : 0; }
       else this.windowStart = cursor - this.windowSize * .2;
     }
-    this.terrain.update({spectrum:this.spectrum,windowStart:this.windowStart,windowSize:this.windowSize,cursor,started:this.started,selection:this.selection,showSelection:!this.sculptClosed,inputTime:time=>this.audio.inputTime(time),outputTime:time=>this.audio.outputTime(time),duration});this.positionEdges();
+    this.terrain.tickCamera(now);this.terrain.update({spectrum:this.spectrum,windowStart:this.windowStart,windowSize:this.windowSize,cursor,started:this.started,selection:this.selection,showSelection:!this.sculptClosed,inputTime:time=>this.audio.inputTime(time),outputTime:time=>this.audio.outputTime(time),duration});this.positionEdges();
   }
   drawFallback(now) {
     if(!this.data)return;

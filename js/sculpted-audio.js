@@ -7,7 +7,7 @@ export class SculptedAudio extends EventTarget {
   constructor(media) {
     super(); this.media = media; this.edit = null; this.version = 0; this.nodes = [];
     this.bufferMode = false; this.playing = false; this.offset = 0; this.ignoreMedia = false; this.intent = 0;
-    for (const type of ['play', 'pause', 'timeupdate', 'loadedmetadata', 'error']) {
+    for (const type of ['play', 'pause', 'timeupdate', 'loadedmetadata', 'error', 'ended']) {
       media.addEventListener(type, () => { if (!this.ignoreMedia && !this.bufferMode) this.emit(type); });
     }
   }
@@ -30,6 +30,7 @@ export class SculptedAudio extends EventTarget {
   get paused() { return this.bufferMode ? !this.playing : this.media.paused; }
   get currentTime() { return this.bufferMode ? clamp(this.offset + (this.playing ? Math.max(0, this.ctx.currentTime - this.began) : 0), 0, this.duration) : this.outputTime(this.media.currentTime); }
   set currentTime(value) {
+    this.emit('seek');
     this.intent++;
     const time = clamp(value, 0, Math.max(0, this.duration - .001));
     if (this.bufferMode) { const resume = this.playing; this.halt(); this.offset = time; if (resume) this.start(time); }
@@ -134,7 +135,7 @@ export class SculptedAudio extends EventTarget {
       if (run !== this.run) return;
       this.halt(); this.offset = limit;
       if (until === null && this.media.loop) { this.offset = 0; this.start(0); }
-      else { this.emit('pause'); this.emit('timeupdate'); }
+      else { this.finishing=until===null;this.emit('pause');this.emit('timeupdate');if(this.finishing)this.emit('ended');this.finishing=false; }
     };
     this.emit('play');
   }
