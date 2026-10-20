@@ -82,14 +82,16 @@
 </tbody></table>
 <h2 id="二、数据迁移：两个值得记住的坑"><a href="#二、数据迁移：两个值得记住的坑" class="headerlink" title="二、数据迁移：两个值得记住的坑"></a>二、数据迁移：两个值得记住的坑</h2><p>训练数据是 LJSpeech-1.1（13100 条 wav + 离线算好的 mel 缓存），约 5.9GB。</p>
 <h3 id="坑-1：cp-的自嵌套事故"><a href="#坑-1：cp-的自嵌套事故" class="headerlink" title="坑 1：cp 的自嵌套事故"></a>坑 1：cp 的自嵌套事故</h3><p>WSL 里原先把 <code>data</code> 做成了指向 <code>/mnt/d</code> 的软链接。执行</p>
-<pre><code>cp -a /mnt/d/.../Matcha-TTS/data ~/projects/Matcha-TTS/data </code></pre>
+<pre><code>cp -a /mnt/d/.../Matcha-TTS/data ~/projects/Matcha-TTS/data
+</code></pre>
 
 <p>时，cp 把源目录<strong>自我嵌套</strong>复制回了 <code>/mnt/d/.../data/data</code>，拷了 2.6 万个文件才报 <code>cannot copy a directory into itself</code>。教训：</p>
 <ul>
 <li>拷贝前先 <code>rm</code> 掉软链接，并确认目标是真实目录</li>
 <li>跨 Windows/WSL 搬大量小文件，别用 <code>/mnt/d</code> 读，用 <strong>robocopy 从 Windows 侧直写</strong>：</li>
 </ul>
-<pre><code>robocopy "D:\...\Matcha-TTS\data" "\\wsl.localhost\Ubuntu\home\&lt;user&gt;\projects\Matcha-TTS\data" /E /MT:16 /NFL /NDL /NP </code></pre>
+<pre><code>robocopy "D:\...\Matcha-TTS\data" "\\wsl.localhost\Ubuntu\home\&lt;user&gt;\projects\Matcha-TTS\data" /E /MT:16 /NFL /NDL /NP
+</code></pre>
 
 <p>5.76GB / 26206 个文件，<strong>50 秒</strong>拷完（约 123MB/s），比 9p 读快一个数量级。</p>
 <h3 id="坑-2：pip-先把缓存目录建成了真目录"><a href="#坑-2：pip-先把缓存目录建成了真目录" class="headerlink" title="坑 2：pip 先把缓存目录建成了真目录"></a>坑 2：pip 先把缓存目录建成了真目录</h3><p>推理侧权重不必重下，直接复用 Windows 已有缓存：</p>
@@ -99,17 +101,27 @@
 <li>HiFi-GAN T2 权重：<code>~/.local/share/matcha_tts</code> → <code>C:\Users\&lt;user&gt;\AppData\Local\matcha_tts</code></li>
 </ul>
 <p>但 <code>~/.cache/huggingface</code> 很可能已经被 pip 导入 <code>huggingface_hub</code> 时<strong>创建成了空真目录</strong>。如果软链脚本只判断”路径是否存在”，就会静默继续用空缓存，等运行时才发现要联网下载。正确姿势：</p>
-<pre><code># 是符号链接才跳过；是真目录且有内容就先搬走 [ -L "$tgt" ] || { [ -e "$tgt" ] &amp;&amp; mv "$tgt" "${tgt}.bak"; ln -s "&lt;windows-path&gt;" "$tgt"; } </code></pre>
+<pre><code># 是符号链接才跳过；是真目录且有内容就先搬走
+[ -L "$tgt" ] || { [ -e "$tgt" ] &amp;&amp; mv "$tgt" "${tgt}.bak"; ln -s "&lt;windows-path&gt;" "$tgt"; }
+</code></pre>
 
-<h2 id="三、mamba-ssm-安装：三次失败到-wheel-直达"><a href="#三、mamba-ssm-安装：三次失败到-wheel-直达" class="headerlink" title="三、mamba-ssm 安装：三次失败到 wheel 直达"></a>三、mamba-ssm 安装：三次失败到 wheel 直达</h2><h3 id="失败-1：PyPI-sdist-缺源文件"><a href="#失败-1：PyPI-sdist-缺源文件" class="headerlink" title="失败 1：PyPI sdist 缺源文件"></a>失败 1：PyPI sdist 缺源文件</h3><pre><code>ninja: error: '.../csrc/causal_conv1d.cpp', needed by '.../causal_conv1d.o', missing and no known rule </code></pre>
+<h2 id="三、mamba-ssm-安装：三次失败到-wheel-直达"><a href="#三、mamba-ssm-安装：三次失败到-wheel-直达" class="headerlink" title="三、mamba-ssm 安装：三次失败到 wheel 直达"></a>三、mamba-ssm 安装：三次失败到 wheel 直达</h2><h3 id="失败-1：PyPI-sdist-缺源文件"><a href="#失败-1：PyPI-sdist-缺源文件" class="headerlink" title="失败 1：PyPI sdist 缺源文件"></a>失败 1：PyPI sdist 缺源文件</h3><pre><code>ninja: error: '.../csrc/causal_conv1d.cpp', needed by '.../causal_conv1d.o', missing and no known rule
+</code></pre>
 
 <p>Packaging bug：从 PyPI 下到的 sdist 里 csrc 目录不完整。换 GitHub tag 源码。</p>
 <h3 id="失败-2：源码编译撞上-nvcc-与-glibc"><a href="#失败-2：源码编译撞上-nvcc-与-glibc" class="headerlink" title="失败 2：源码编译撞上 nvcc 与 glibc"></a>失败 2：源码编译撞上 nvcc 与 glibc</h3><p>GitHub 源码齐全后，两个报错接踵而至：</p>
-<pre><code># ① C++ 文件找不到 CUDA 头（conda 的 CUDA 布局与 cpp_extension 期望的 include 路径不一致） fatal error: cuda_runtime_api.h: No such file or directory  # ② nvcc 12.8 与 Ubuntu 25.10 的 glibc 2.42 头文件冲突 error: exception specification is incompatible with that of previous function "cospi" </code></pre>
+<pre><code># ① C++ 文件找不到 CUDA 头（conda 的 CUDA 布局与 cpp_extension 期望的 include 路径不一致）
+fatal error: cuda_runtime_api.h: No such file or directory
+
+# ② nvcc 12.8 与 Ubuntu 25.10 的 glibc 2.42 头文件冲突
+error: exception specification is incompatible with that of previous function "cospi"
+</code></pre>
 
 <p>第二个是硬伤：CUDA 12.8 不支持这么新的 glibc，理论上要么降 glibc（动系统，不现实），要么换完整 CUDA 工具链。到这里编译路线成本已经很高。</p>
 <h3 id="解法：官方-GitHub-Releases-的预编译-wheel-矩阵"><a href="#解法：官方-GitHub-Releases-的预编译-wheel-矩阵" class="headerlink" title="解法：官方 GitHub Releases 的预编译 wheel 矩阵"></a>解法：官方 GitHub Releases 的预编译 wheel 矩阵</h3><p>mamba-ssm / causal-conv1d 的 release 为常见组合都构建了 wheel，文件名把兼容条件写得很清楚：</p>
-<pre><code>causal_conv1d-1.7.0+cu12torch2.8cxx11abiTRUE-cp311-cp311-linux_x86_64.whl mamba_ssm-2.2.5+cu12torch2.8cxx11abiTRUE-cp311-cp311-linux_x86_64.whl </code></pre>
+<pre><code>causal_conv1d-1.7.0+cu12torch2.8cxx11abiTRUE-cp311-cp311-linux_x86_64.whl
+mamba_ssm-2.2.5+cu12torch2.8cxx11abiTRUE-cp311-cp311-linux_x86_64.whl
+</code></pre>
 
 <p>选型四要素，逐个对上即可：</p>
 <table>
@@ -136,12 +148,29 @@
 <td>解释器版本</td>
 </tr>
 </tbody></table>
-<pre><code>pip install --no-deps causal_conv1d-1.7.0+cu12torch2.8cxx11abiTRUE-cp311-cp311-linux_x86_64.whl pip install --no-deps mamba_ssm-2.2.5+cu12torch2.8cxx11abiTRUE-cp311-cp311-linux_x86_64.whl </code></pre>
+<pre><code>pip install --no-deps causal_conv1d-1.7.0+cu12torch2.8cxx11abiTRUE-cp311-cp311-linux_x86_64.whl
+pip install --no-deps mamba_ssm-2.2.5+cu12torch2.8cxx11abiTRUE-cp311-cp311-linux_x86_64.whl
+</code></pre>
 
 <p>国内网络下 GitHub 直连可能超时，可以准备一个代理前缀回退（例如 <code>https://gh-proxy.com/&lt;原始URL&gt;</code>），脚本里先直连、失败再走代理。</p>
 <h3 id="版本选择的一个雷"><a href="#版本选择的一个雷" class="headerlink" title="版本选择的一个雷"></a>版本选择的一个雷</h3><p>当时最新的是 <code>mamba-ssm 2.3.2</code>，但它的 metadata 依赖 <code>triton&gt;=3.5</code>、<code>tilelang</code>、<code>quack-kernels</code> 等。直接用 pip 解析会<strong>尝试把 torch 2.8 升级到更新的版本</strong>（日志里能看到开始下载 CUDA 13 的 nvidia 组件），有破坏现有 cu128 栈的风险。对于只想用 <code>Mamba</code> / <code>Mamba2</code> 两种块的场景，选依赖干净的 <code>2.2.5</code> 更稳。</p>
 <p>另外 <code>mamba_ssm</code> 的 <code>__init__</code> 会 import generation 工具，需要 <code>transformers</code>；实测 <code>transformers 4.57</code>（&lt;5）与该环境里的 <code>diffusers 0.40</code> 可以共存，pip 关于 <code>huggingface-hub</code> 版本的警告可以忽略。</p>
-<h2 id="四、验证安装"><a href="#四、验证安装" class="headerlink" title="四、验证安装"></a>四、验证安装</h2><pre><code>import torch, causal_conv1d, mamba_ssm print(causal_conv1d.__version__, mamba_ssm.__version__)  from causal_conv1d import causal_conv1d_fn x = torch.randn(2, 64, 100, device="cuda", dtype=torch.float16, requires_grad=True) w = torch.randn(64, 4, device="cuda", dtype=torch.float16, requires_grad=True) y = causal_conv1d_fn(x, w, bias=None, activation="silu"); y.sum().backward() print("causal_conv1d ok", tuple(y.shape))  from mamba_ssm import Mamba, Mamba2 for cls, d_state in ((Mamba, 16), (Mamba2, 64)):     m = cls(d_model=128, d_state=d_state).cuda().to(torch.float16)     inp = torch.randn(2, 50, 128, device="cuda", dtype=torch.float16, requires_grad=True)     inp_out = m(inp); inp_out.sum().backward()     print(cls.__name__, "fwd/bwd ok") </code></pre>
+<h2 id="四、验证安装"><a href="#四、验证安装" class="headerlink" title="四、验证安装"></a>四、验证安装</h2><pre><code>import torch, causal_conv1d, mamba_ssm
+print(causal_conv1d.__version__, mamba_ssm.__version__)
+
+from causal_conv1d import causal_conv1d_fn
+x = torch.randn(2, 64, 100, device="cuda", dtype=torch.float16, requires_grad=True)
+w = torch.randn(64, 4, device="cuda", dtype=torch.float16, requires_grad=True)
+y = causal_conv1d_fn(x, w, bias=None, activation="silu"); y.sum().backward()
+print("causal_conv1d ok", tuple(y.shape))
+
+from mamba_ssm import Mamba, Mamba2
+for cls, d_state in ((Mamba, 16), (Mamba2, 64)):
+    m = cls(d_model=128, d_state=d_state).cuda().to(torch.float16)
+    inp = torch.randn(2, 50, 128, device="cuda", dtype=torch.float16, requires_grad=True)
+    inp_out = m(inp); inp_out.sum().backward()
+    print(cls.__name__, "fwd/bwd ok")
+</code></pre>
 
 <p>前向 + 反向都在 GPU 上跑通，环境就算齐了。</p>
 <h2 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h2><ul>

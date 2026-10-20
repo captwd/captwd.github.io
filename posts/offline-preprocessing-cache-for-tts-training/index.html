@@ -47,7 +47,11 @@
 </blockquote>
 <p>训练一个语音模型时，最容易被忽视的浪费是：<strong>每个 epoch 都把同一批音频重新算一遍梅尔谱、重新做一遍音素化</strong>。这个项目里 13100 条 LJSpeech 数据，每轮训练都要在 CPU 上重复上千次 FFT 和调用 espeak，纯属内耗。这篇记录我做的离线预处理缓存方案：思路、实现、验证和收益。</p>
 <h2 id="一、问题：训练循环里藏着一个重复劳动"><a href="#一、问题：训练循环里藏着一个重复劳动" class="headerlink" title="一、问题：训练循环里藏着一个重复劳动"></a>一、问题：训练循环里藏着一个重复劳动</h2><p>原始 Matcha-TTS 的数据管线是这样的（每个 epoch、每条样本）：</p>
-<pre><code>读 wav → 短时傅里叶变换 → mel 滤波器组 → 取对数  (CPU 密集) 文本 → 清洗/规范化 → espeak 音素化              (调用外部进程，慢)         ↓     collate 变长序列补零 → 送 GPU </code></pre>
+<pre><code>读 wav → 短时傅里叶变换 → mel 滤波器组 → 取对数  (CPU 密集)
+文本 → 清洗/规范化 → espeak 音素化              (调用外部进程，慢)
+        ↓
+    collate 变长序列补零 → 送 GPU
+</code></pre>
 
 <p>而这两步的输入是<strong>确定性的</strong>——同一批数据、同一套参数，结果永远一样。在 GPU 上训练时，CPU 还在为下一批数据”现磨”这些特征，直接后果是：</p>
 <ul>
@@ -83,7 +87,13 @@
 </tbody></table>
 <p>13100 条数据，<strong>8 进程处理仅 47 秒</strong>，产出约 2.2GB 缓存。</p>
 <h3 id="组件二：数据集类的缓存命中逻辑（改造）"><a href="#组件二：数据集类的缓存命中逻辑（改造）" class="headerlink" title="组件二：数据集类的缓存命中逻辑（改造）"></a>组件二：数据集类的缓存命中逻辑（改造）</h3><p><code>TextMelDataset</code> 增加一层判断：</p>
-<pre><code>启动时读取 cache/meta.json   ├─ 参数与当前配置一致 → 启用缓存   └─ 不一致           → 自动禁用 + 告警（回退现场计算） 每条样本：   ├─ 命中缓存 → 直接读 .npy / phonemes.json   └─ 未命中   → 回退到原来的现场计算 </code></pre>
+<pre><code>启动时读取 cache/meta.json
+  ├─ 参数与当前配置一致 → 启用缓存
+  └─ 不一致           → 自动禁用 + 告警（回退现场计算）
+每条样本：
+  ├─ 命中缓存 → 直接读 .npy / phonemes.json
+  └─ 未命中   → 回退到原来的现场计算
+</code></pre>
 
 <p>两个设计细节很关键：</p>
 <ol>
@@ -132,14 +142,77 @@
 </ol>
 <p>代码量不大，但把训练从”数据饥饿”里解放了出来，是整个项目里性价比最高的一处改动。</p>
 <h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="1-预处理脚本：单个样本的-mel-音素"><a href="#1-预处理脚本：单个样本的-mel-音素" class="headerlink" title="1. 预处理脚本：单个样本的 mel + 音素"></a>1. 预处理脚本：单个样本的 mel + 音素</h3><p>计算逻辑与 <code>TextMelDataset.get_mel</code> / <code>get_text</code> 逐行保持一致，这样缓存和现场计算的结果才可比。</p>
-<pre><code>def process_one(item, params):     filepath, text = item     stem = Path(filepath).stem      # 断点续跑：已经算过的样本直接跳过     if (params["mel_dir"] / f"{stem}.npy").exists() and stem in params["done"]:         return stem, None      # 梅尔频谱     audio, sr = ta.load(filepath)     mel = mel_spectrogram(         audio,         params["n_fft"], params["n_feats"], params["sample_rate"],         params["hop_length"], params["win_length"],         params["f_min"], params["f_max"], center=False,     ).squeeze()     mel = normalize(mel, params["mel_mean"], params["mel_std"])     np.save(params["mel_dir"] / f"{stem}.npy", mel.cpu().numpy().astype(np.float32))      # 文本 -&gt; 音素 ID     seq, cleaned = text_to_sequence(text, list(params["cleaners"]))     if params["add_blank"]:         seq = intersperse(seq, 0)     return stem, {"x": [int(i) for i in seq], "text": cleaned} </code></pre>
+<pre><code>def process_one(item, params):
+    filepath, text = item
+    stem = Path(filepath).stem
+
+    # 断点续跑：已经算过的样本直接跳过
+    if (params["mel_dir"] / f"{stem}.npy").exists() and stem in params["done"]:
+        return stem, None
+
+    # 梅尔频谱
+    audio, sr = ta.load(filepath)
+    mel = mel_spectrogram(
+        audio,
+        params["n_fft"], params["n_feats"], params["sample_rate"],
+        params["hop_length"], params["win_length"],
+        params["f_min"], params["f_max"], center=False,
+    ).squeeze()
+    mel = normalize(mel, params["mel_mean"], params["mel_std"])
+    np.save(params["mel_dir"] / f"{stem}.npy", mel.cpu().numpy().astype(np.float32))
+
+    # 文本 -&gt; 音素 ID
+    seq, cleaned = text_to_sequence(text, list(params["cleaners"]))
+    if params["add_blank"]:
+        seq = intersperse(seq, 0)
+    return stem, {"x": [int(i) for i in seq], "text": cleaned}
+</code></pre>
 
 <h3 id="2-多进程跑完，把参数写进-meta-json"><a href="#2-多进程跑完，把参数写进-meta-json" class="headerlink" title="2. 多进程跑完，把参数写进 meta.json"></a>2. 多进程跑完，把参数写进 meta.json</h3><p><code>meta.json</code> 是给训练侧做参数校验用的，避免配置改了还在用旧缓存。</p>
-<pre><code>with ProcessPoolExecutor(max_workers=args.workers) as ex:     for stem, result in tqdm(ex.map(process_one, todo, [params] * len(todo)), total=len(todo)):         if result is not None:             phonemes[stem] = result  ph_path.write_text(json.dumps(phonemes, ensure_ascii=False), encoding="utf-8") meta = {k: v for k, v in params.items() if k not in ("mel_dir", "done")} meta["version"] = 1 (cache_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8") </code></pre>
+<pre><code>with ProcessPoolExecutor(max_workers=args.workers) as ex:
+    for stem, result in tqdm(ex.map(process_one, todo, [params] * len(todo)), total=len(todo)):
+        if result is not None:
+            phonemes[stem] = result
 
-<h3 id="3-训练侧：启动时校验参数，对不上就禁用缓存"><a href="#3-训练侧：启动时校验参数，对不上就禁用缓存" class="headerlink" title="3. 训练侧：启动时校验参数，对不上就禁用缓存"></a>3. 训练侧：启动时校验参数，对不上就禁用缓存</h3><pre><code>def _load_preprocess_cache(self):     if not (meta_path.exists() and ph_path.exists()):         return False, None      meta = json.loads(meta_path.read_text(encoding="utf-8"))     expected = {         "n_fft": self.n_fft, "n_feats": self.n_mels, "sample_rate": self.sample_rate,         "hop_length": self.hop_length, "win_length": self.win_length,         "f_min": self.f_min, "f_max": self.f_max,         "mel_mean": self.data_parameters["mel_mean"], "mel_std": self.data_parameters["mel_std"],         "cleaners": self.cleaners, "add_blank": self.add_blank,     }     for key, value in expected.items():         if not _match(meta.get(key), value):          # 数值用 math.isclose，其余直接比较             warnings.warn(f"预处理缓存参数与当前配置不一致({key})，已禁用缓存，将现场计算")             return False, None      return True, json.loads(ph_path.read_text(encoding="utf-8")) </code></pre>
+ph_path.write_text(json.dumps(phonemes, ensure_ascii=False), encoding="utf-8")
+meta = {k: v for k, v in params.items() if k not in ("mel_dir", "done")}
+meta["version"] = 1
+(cache_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+</code></pre>
 
-<h3 id="4-取数据：优先读缓存，未命中回退原逻辑"><a href="#4-取数据：优先读缓存，未命中回退原逻辑" class="headerlink" title="4. 取数据：优先读缓存，未命中回退原逻辑"></a>4. 取数据：优先读缓存，未命中回退原逻辑</h3><pre><code>def get_mel(self, filepath):     cache_file = self.cache_dir / "mel" / f"{Path(filepath).stem}.npy"     if self._cache_ok and cache_file.exists():         return torch.from_numpy(np.load(cache_file))     ...  # 原逻辑：读 wav -&gt; FFT -&gt; mel  # get_datapoint 里的音素部分 if self.phoneme_cache is not None and utt_id in self.phoneme_cache:     cached = self.phoneme_cache[utt_id]     text, cleaned_text = torch.IntTensor(cached["x"]), cached["text"] else:     text, cleaned_text = self.get_text(text, add_blank=self.add_blank) </code></pre>
+<h3 id="3-训练侧：启动时校验参数，对不上就禁用缓存"><a href="#3-训练侧：启动时校验参数，对不上就禁用缓存" class="headerlink" title="3. 训练侧：启动时校验参数，对不上就禁用缓存"></a>3. 训练侧：启动时校验参数，对不上就禁用缓存</h3><pre><code>def _load_preprocess_cache(self):
+    if not (meta_path.exists() and ph_path.exists()):
+        return False, None
+
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    expected = {
+        "n_fft": self.n_fft, "n_feats": self.n_mels, "sample_rate": self.sample_rate,
+        "hop_length": self.hop_length, "win_length": self.win_length,
+        "f_min": self.f_min, "f_max": self.f_max,
+        "mel_mean": self.data_parameters["mel_mean"], "mel_std": self.data_parameters["mel_std"],
+        "cleaners": self.cleaners, "add_blank": self.add_blank,
+    }
+    for key, value in expected.items():
+        if not _match(meta.get(key), value):          # 数值用 math.isclose，其余直接比较
+            warnings.warn(f"预处理缓存参数与当前配置不一致({key})，已禁用缓存，将现场计算")
+            return False, None
+
+    return True, json.loads(ph_path.read_text(encoding="utf-8"))
+</code></pre>
+
+<h3 id="4-取数据：优先读缓存，未命中回退原逻辑"><a href="#4-取数据：优先读缓存，未命中回退原逻辑" class="headerlink" title="4. 取数据：优先读缓存，未命中回退原逻辑"></a>4. 取数据：优先读缓存，未命中回退原逻辑</h3><pre><code>def get_mel(self, filepath):
+    cache_file = self.cache_dir / "mel" / f"{Path(filepath).stem}.npy"
+    if self._cache_ok and cache_file.exists():
+        return torch.from_numpy(np.load(cache_file))
+    ...  # 原逻辑：读 wav -&gt; FFT -&gt; mel
+
+# get_datapoint 里的音素部分
+if self.phoneme_cache is not None and utt_id in self.phoneme_cache:
+    cached = self.phoneme_cache[utt_id]
+    text, cleaned_text = torch.IntTensor(cached["x"]), cached["text"]
+else:
+    text, cleaned_text = self.get_text(text, add_blank=self.add_blank)
+</code></pre>
 
 <p>完整实现见仓库里的 <code>scripts/preprocess_dataset.py</code> 和 <code>matcha/data/text_mel_datamodule.py</code>。</p>
 </article>

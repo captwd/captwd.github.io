@@ -48,7 +48,8 @@
 <p>前面几篇都在改模型（换 Mamba、换 ConvNeXt）。这篇换个方向：<strong>不动模型、不重新训练</strong>，只在推理时改一下 ODE 的时间步怎么分配，能拿到多少收益——以及一个只看指标发现不了的问题。</p>
 <p><strong>先抛一个保留意见</strong>：sway”前期密集、后期稀疏”的步长分配逻辑我是认同的，但我对它在极低步数下的实际收益一直存疑。理由是个简单的数学事实：sway 保持端点不变，而 <strong>1 步的时间网格只有 [0, 1] 两个端点，和均匀网格完全一致</strong>——1 步下 sway 理论上是个彻底的空操作；2<del>3 步时网格虽然不同了（2 步从中点切分变成约 0.29/0.71），但这种量级的重排，未必撬得动被整体粗粒度支配的离散误差。所以我的预期是：<strong>低步数下 sway 与均匀的差别不应该特别大</strong>。后文的实验数据对得上这个预期——收益虽然配对检验显著（p&lt;0.0001），绝对幅度也只有 0.1</del>0.4 dB。”显著”和”大”是两回事，这恰好也是本文想讲的”怎么读指标”的一部分。这个怀疑精神在文末的追加实验里派上了更大的用场——那一次被检验的，是”更高级的求解器必然更好”这条理论直觉。</p>
 <h2 id="Sway-Sampling-是什么"><a href="#Sway-Sampling-是什么" class="headerlink" title="Sway Sampling 是什么"></a>Sway Sampling 是什么</h2><p>来自 <a target="_blank" rel="noopener" href="https://arxiv.org/abs/2410.06885">F5-TTS</a>（arXiv 2410.06885）。推理时把均匀的时间轴做一次非线性重参数化：</p>
-<pre><code>t ← t + a · ( cos(π/2 · t) − 1 + t ) </code></pre>
+<pre><code>t ← t + a · ( cos(π/2 · t) − 1 + t )
+</code></pre>
 
 <ul>
 <li>端点不变（t=0→0，t=1→1），所以积分的起点终点不受影响，只改中间的步长分布</li>
@@ -75,7 +76,10 @@
 <td>新增 <code>--sway_sampling_coef</code> 和 <code>--seed</code></td>
 </tr>
 </tbody></table>
-<pre><code>t_span = torch.linspace(0, 1, n_timesteps + 1, device=mu.device) if self.sway_sampling_coef is not None:     t_span = t_span + self.sway_sampling_coef * (torch.cos(torch.pi / 2 * t_span) - 1 + t_span) </code></pre>
+<pre><code>t_span = torch.linspace(0, 1, n_timesteps + 1, device=mu.device)
+if self.sway_sampling_coef is not None:
+    t_span = t_span + self.sway_sampling_coef * (torch.cos(torch.pi / 2 * t_span) - 1 + t_span)
+</code></pre>
 
 <p><strong>不需要重训</strong>：流匹配生成是在解一个 ODE（<code>dx/dt = v_θ(x,t)</code>），它的解只取决于速度场和初值；sway 只是换了一组离散点去逼近同一条轨迹，模型一个字都没动。</p>
 <p><code>--seed</code> 是我加的另一件事：ODE 的起点噪声是随机的，如果两次评估各自随机采样，差异会被采样噪声淹没。固定”每条语句一个种子”之后，同一个句子在不同配置下用<strong>同一份起点噪声</strong>，才能做逐句配对比较。</p>
@@ -257,7 +261,8 @@
 <p><strong>步数越少，输出能量越低</strong>——1 步在我的权重上只有 10 步的 53%，听起来就是”轻、闷、没劲”。而 MCD 量的是频谱形状的距离、WER 量的是可懂度，<strong>两个都不看响度</strong>，所以指标一路变好，听感却在退化。</p>
 <p>顺带一个对照：<strong>在官方权重上 1 步只掉 8% 的能量</strong>，听感基本正常。所以”1 步能不能用”取决于速度场的精度，不能只看 MCD。</p>
 <h2 id="追加实验：二阶求解器-AB2，全面落败"><a href="#追加实验：二阶求解器-AB2，全面落败" class="headerlink" title="追加实验：二阶求解器 AB2，全面落败"></a>追加实验：二阶求解器 AB2，全面落败</h2><p>sway 改的是职责一——“在哪几个时刻问模型”（时间网格）。顺着追一步，自然的问题是：<strong>职责二——“怎么用模型的回答”——能不能也升级？</strong> Euler 每步只用当前一次速度求值（一阶精度）；教科书上的 Adams-Bashforth 两步法（AB2）额外利用<strong>上一步的速度求值</strong>做线性外推：</p>
-<pre><code>x_{i+1} = x_i + dt · ( 3/2·f_i − 1/2·f_{i−1} ) </code></pre>
+<pre><code>x_{i+1} = x_i + dt · ( 3/2·f_i − 1/2·f_{i−1} )
+</code></pre>
 
 <p>不加 NFE、不动模型、不重训——理论上把全局积分精度从 O(dt) 提到 O(dt²)。注意 f_prev 的系数是<strong>负</strong>的：这不是”平滑历史”，而是用两次求值之差放大场的变化趋势。</p>
 <p><strong>先验算数学（玩具 ODE）</strong>。dx/dt = e^t 有解析解，验证结果完全符合教科书：Euler 一阶（n 翻倍误差减半）、AB2 二阶（n 翻倍误差 ÷4）、且 sway 非均匀网格上 AB2 依然二阶（实现用变步长系数，与 sway 天然兼容）。数学全对，上真模型。</p>
@@ -311,7 +316,28 @@
 <li><strong>教训</strong>：调采样设置时<strong>一定要听</strong>，并给评估补一个响度指标——MCD 变好不等于语音变好</li>
 <li><strong>追加的 AB2 实验全面落败</strong>：教科书二阶方法在学习场上输给一阶 Euler（步数越少输得越狠，sway 网格上更差）——“理论精度阶”的兑现要求求值干净、步长相对场尺度足够小，2~10 步的学习场采样两个都不满足；反过来，Euler + sway 的组合因为”不放大任何历史”而格外稳健</li>
 </ol>
-<h2 id="复现"><a href="#复现" class="headerlink" title="复现"></a>复现</h2><pre><code># 单次评估（2 步 + sway） python scripts/evaluate.py --checkpoint_path &lt;ckpt&gt; \   --filelist data/LJSpeech-1.1/val.txt --output_folder results/eval_xxx \   --vocoder hifigan_T2_v1 --steps 2 --seed 1234 --sway_sampling_coef -1.0  # sway 系数 × 极低 NFE 曲线（1/2/3/4/6/10 步） bash wsl_env/sway_curve.sh &amp;&amp; python wsl_env/sway_curve_compare.py  # AB2 求解器自检（几秒，无需 checkpoint；含公式验证 + 实现回归测试） python scripts/test_ab2_convergence.py  # AB2 配置评估（与 euler 同协议同种子，逐句可配对） python scripts/evaluate.py --checkpoint_path &lt;ckpt&gt; \   --filelist data/LJSpeech-1.1/val.txt --output_folder results/ab2_curve/&lt;name&gt;/s2_ab2_m10 \   --vocoder hifigan_T2_v1 --steps 2 --seed 1234 --sampling_method ab2 --sway_sampling_coef -1.0  # 全矩阵（2 权重 × 5 步数 × {ab2_off, ab2_m10} + ASR 关键档）与对照分析 bash wsl_env/ab2_curve.sh &amp;&amp; python wsl_env/ab2_curve_compare.py  # 生成试听音频（两个权重 × 5 档设置） python wsl_env/synth_steps_ab.py &amp;&amp; python wsl_env/synth_steps_ab_official.py </code></pre>
+<h2 id="复现"><a href="#复现" class="headerlink" title="复现"></a>复现</h2><pre><code># 单次评估（2 步 + sway）
+python scripts/evaluate.py --checkpoint_path &lt;ckpt&gt; \
+  --filelist data/LJSpeech-1.1/val.txt --output_folder results/eval_xxx \
+  --vocoder hifigan_T2_v1 --steps 2 --seed 1234 --sway_sampling_coef -1.0
+
+# sway 系数 × 极低 NFE 曲线（1/2/3/4/6/10 步）
+bash wsl_env/sway_curve.sh &amp;&amp; python wsl_env/sway_curve_compare.py
+
+# AB2 求解器自检（几秒，无需 checkpoint；含公式验证 + 实现回归测试）
+python scripts/test_ab2_convergence.py
+
+# AB2 配置评估（与 euler 同协议同种子，逐句可配对）
+python scripts/evaluate.py --checkpoint_path &lt;ckpt&gt; \
+  --filelist data/LJSpeech-1.1/val.txt --output_folder results/ab2_curve/&lt;name&gt;/s2_ab2_m10 \
+  --vocoder hifigan_T2_v1 --steps 2 --seed 1234 --sampling_method ab2 --sway_sampling_coef -1.0
+
+# 全矩阵（2 权重 × 5 步数 × {ab2_off, ab2_m10} + ASR 关键档）与对照分析
+bash wsl_env/ab2_curve.sh &amp;&amp; python wsl_env/ab2_curve_compare.py
+
+# 生成试听音频（两个权重 × 5 档设置）
+python wsl_env/synth_steps_ab.py &amp;&amp; python wsl_env/synth_steps_ab_official.py
+</code></pre>
 
 <p>完整记录：<code>docs/2026-09-12_summary.md</code>（sway 全部表格与脚本说明）；AB2 实验数据在 <code>results/ab2_curve/</code>（24 配置），对照脚本 <code>wsl_env/ab2_curve_compare.py</code>。</p>
 </article>

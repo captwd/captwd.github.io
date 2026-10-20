@@ -47,7 +47,15 @@
 </blockquote>
 <p>模型训练之外，”怎么优雅地换声码器””怎么客观评价合成质量””怎么展示结果”这三件事同样值得工程化。这篇记录对 Matcha-TTS 做的三项改造：注册表重构、MCD/WER/CER 评价体系、以及一个纯静态试听 Demo 页。</p>
 <h2 id="一、声码器注册表：加新声码器只加文件"><a href="#一、声码器注册表：加新声码器只加文件" class="headerlink" title="一、声码器注册表：加新声码器只加文件"></a>一、声码器注册表：加新声码器只加文件</h2><h3 id="问题"><a href="#问题" class="headerlink" title="问题"></a>问题</h3><p>原版推理框架里，声码器的加载是 <code>if/else</code> 硬编码。每接一个新声码器（HiFi-GAN 的各个版本、BigVGAN……）都要去改 <code>cli.py</code> 的主流程，越改越乱。</p>
-<h3 id="方案：装饰器注册表"><a href="#方案：装饰器注册表" class="headerlink" title="方案：装饰器注册表"></a>方案：装饰器注册表</h3><pre><code># matcha/vocoders/__init__.py @register_vocoder("hifigan_T2_v1") def load_hifigan_t2(ckpt, device):     ...     return vocoder, denoiser  def load_vocoder(name, ckpt, device):     return VOCODER_REGISTRY[name](ckpt, device) </code></pre>
+<h3 id="方案：装饰器注册表"><a href="#方案：装饰器注册表" class="headerlink" title="方案：装饰器注册表"></a>方案：装饰器注册表</h3><pre><code># matcha/vocoders/__init__.py
+@register_vocoder("hifigan_T2_v1")
+def load_hifigan_t2(ckpt, device):
+    ...
+    return vocoder, denoiser
+
+def load_vocoder(name, ckpt, device):
+    return VOCODER_REGISTRY[name](ckpt, device)
+</code></pre>
 
 <p>统一了加载签名：<code>loader(ckpt, device) -&gt; (vocoder, denoiser)</code>。改造后接一个新声码器的流程变成：</p>
 <ol>
@@ -56,7 +64,9 @@
 </ol>
 <p><code>cli.py</code> 里只剩一行分发，<code>--vocoder</code> 的候选值也自动来自注册表。顺带修了一个 Windows 下的小问题：中文 GBK 控制台打印 emoji 会崩，加 <code>sys.stdout.reconfigure(errors="replace")</code> 兜底。</p>
 <h3 id="附带设计：BigVGAN-的离线加载"><a href="#附带设计：BigVGAN-的离线加载" class="headerlink" title="附带设计：BigVGAN 的离线加载"></a>附带设计：BigVGAN 的离线加载</h3><p>BigVGAN 官方 <code>from_pretrained</code> 依赖较重的 huggingface_hub 流程，且会拉取训练残留（~140MB 判别器）。改成了手动加载：优先在本地缓存里找快照（离线可用），缓存不全才联网，且<strong>只下载推理所需两个文件</strong>（<code>config.json</code> + <code>bigvgan_generator.pt</code>）：</p>
-<pre><code>本地缓存 snapshots/*/ 里有 config.json + bigvgan_generator.pt → 直接用 否则 snapshot_download(model_id, allow_patterns=[这两个文件]) </code></pre>
+<pre><code>本地缓存 snapshots/*/ 里有 config.json + bigvgan_generator.pt → 直接用
+否则 snapshot_download(model_id, allow_patterns=[这两个文件])
+</code></pre>
 
 <h2 id="二、评价指标体系：MCD-WER-CER"><a href="#二、评价指标体系：MCD-WER-CER" class="headerlink" title="二、评价指标体系：MCD + WER/CER"></a>二、评价指标体系：MCD + WER/CER</h2><p>只看 loss 是不够的。加了两类客观指标，全部零新依赖（无需 SPTK/mcep）：</p>
 <table>
@@ -120,14 +130,45 @@
 <li>有了指标和标定，”模型有没有变好”才能从主观听感变成能比较、能做统计检验的数字，后面换骨干的实验能下结论靠的就是这个</li>
 <li>Demo 页则是给外面看的：一个能点开就听的矩阵，比一张表格更有说服力</li>
 </ul>
-<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="注册表本体"><a href="#注册表本体" class="headerlink" title="注册表本体"></a>注册表本体</h3><pre><code>VOCODER_REGISTRY = {}  def register_vocoder(name):     def decorator(loader):         if name in VOCODER_REGISTRY:             raise KeyError(f"Vocoder '{name}' is already registered!")         VOCODER_REGISTRY[name] = loader         return loader     return decorator  def load_vocoder(name, checkpoint_path, device):     if name not in VOCODER_REGISTRY:         raise NotImplementedError(f"Vocoder '{name}' not implemented! Registered: {sorted(VOCODER_REGISTRY)}")     return VOCODER_REGISTRY[name](checkpoint_path, device) </code></pre>
+<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="注册表本体"><a href="#注册表本体" class="headerlink" title="注册表本体"></a>注册表本体</h3><pre><code>VOCODER_REGISTRY = {}
 
-<h3 id="接一个-HiFi-GAN：写个带装饰器的加载函数就行"><a href="#接一个-HiFi-GAN：写个带装饰器的加载函数就行" class="headerlink" title="接一个 HiFi-GAN：写个带装饰器的加载函数就行"></a>接一个 HiFi-GAN：写个带装饰器的加载函数就行</h3><pre><code>@register_vocoder(HIFIGAN_T2_V1) def load_hifigan_t2_v1(checkpoint_path, device):     return _load_hifigan_with_denoiser(checkpoint_path, device) </code></pre>
+def register_vocoder(name):
+    def decorator(loader):
+        if name in VOCODER_REGISTRY:
+            raise KeyError(f"Vocoder '{name}' is already registered!")
+        VOCODER_REGISTRY[name] = loader
+        return loader
+    return decorator
+
+def load_vocoder(name, checkpoint_path, device):
+    if name not in VOCODER_REGISTRY:
+        raise NotImplementedError(f"Vocoder '{name}' not implemented! Registered: {sorted(VOCODER_REGISTRY)}")
+    return VOCODER_REGISTRY[name](checkpoint_path, device)
+</code></pre>
+
+<h3 id="接一个-HiFi-GAN：写个带装饰器的加载函数就行"><a href="#接一个-HiFi-GAN：写个带装饰器的加载函数就行" class="headerlink" title="接一个 HiFi-GAN：写个带装饰器的加载函数就行"></a>接一个 HiFi-GAN：写个带装饰器的加载函数就行</h3><pre><code>@register_vocoder(HIFIGAN_T2_V1)
+def load_hifigan_t2_v1(checkpoint_path, device):
+    return _load_hifigan_with_denoiser(checkpoint_path, device)
+</code></pre>
 
 <p>推理侧只剩一行分发：</p>
-<pre><code>vocoder, denoiser = vocoder_registry.load_vocoder(vocoder_name, checkpoint_path, device) </code></pre>
+<pre><code>vocoder, denoiser = vocoder_registry.load_vocoder(vocoder_name, checkpoint_path, device)
+</code></pre>
 
-<h3 id="MCD-的核心（DCT-DTW，零新依赖）"><a href="#MCD-的核心（DCT-DTW，零新依赖）" class="headerlink" title="MCD 的核心（DCT + DTW，零新依赖）"></a>MCD 的核心（DCT + DTW，零新依赖）</h3><pre><code>def mel_cepstral_distortion(gen_mel, ref_mel, n_mfcc=13, skip_c0=True, align="dtw"):     gen_mc = dct(gen_mel, type=2, axis=0, norm="ortho")[:n_mfcc, :]     ref_mc = dct(ref_mel, type=2, axis=0, norm="ortho")[:n_mfcc, :]     if skip_c0:                       # 去掉能量项，聚焦音色 / 清晰度         gen_mc, ref_mc = gen_mc[1:, :], ref_mc[1:, :]      if align == "dtw":         g, r = gen_mc.T, ref_mc.T         cost = (g**2).sum(-1)[:, None] + (r**2).sum(-1)[None, :] - 2.0 * (g @ r.T)         path = _dtw_align(np.maximum(cost, 0.0))         diffs = np.array([np.linalg.norm(gen_mc[:, i] - ref_mc[:, j]) for i, j in path])      return float(_MCD_SCALE * diffs.mean()) </code></pre>
+<h3 id="MCD-的核心（DCT-DTW，零新依赖）"><a href="#MCD-的核心（DCT-DTW，零新依赖）" class="headerlink" title="MCD 的核心（DCT + DTW，零新依赖）"></a>MCD 的核心（DCT + DTW，零新依赖）</h3><pre><code>def mel_cepstral_distortion(gen_mel, ref_mel, n_mfcc=13, skip_c0=True, align="dtw"):
+    gen_mc = dct(gen_mel, type=2, axis=0, norm="ortho")[:n_mfcc, :]
+    ref_mc = dct(ref_mel, type=2, axis=0, norm="ortho")[:n_mfcc, :]
+    if skip_c0:                       # 去掉能量项，聚焦音色 / 清晰度
+        gen_mc, ref_mc = gen_mc[1:, :], ref_mc[1:, :]
+
+    if align == "dtw":
+        g, r = gen_mc.T, ref_mc.T
+        cost = (g**2).sum(-1)[:, None] + (r**2).sum(-1)[None, :] - 2.0 * (g @ r.T)
+        path = _dtw_align(np.maximum(cost, 0.0))
+        diffs = np.array([np.linalg.norm(gen_mc[:, i] - ref_mc[:, j]) for i, j in path])
+
+    return float(_MCD_SCALE * diffs.mean())
+</code></pre>
 
 <p>相关文件：<code>matcha/vocoders/__init__.py</code>、<code>matcha/utils/metrics.py</code>、<code>scripts/evaluate.py</code>。</p>
 </article>

@@ -190,7 +190,20 @@
 </ol>
 <p>三篇下来，环境、集成、评估这条线就闭合了。代码、配置和评估脚本都在仓库里，欢迎复现和指正。</p>
 <h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><p>评估脚本会逐句写出 <code>results.csv</code>（<code>utt_id, mcd_dtw, wer, cer, gt_wer, ...</code>），配对检验就是把它按 <code>utt_id</code> 对齐后跑 Wilcoxon：</p>
-<pre><code>import pandas as pd from scipy.stats import wilcoxon  mamba = pd.read_csv("results/eval_mamba_ep139_hifigan/results.csv").set_index("utt_id") base  = pd.read_csv("results/eval_baseline_ep140_hifigan/results.csv").set_index("utt_id")  common = mamba.index.intersection(base.index)      # 只保留两边都有的句子 a, b = mamba.loc[common], base.loc[common]  for col in ("wer", "cer", "mcd_dtw"):     d = a[col].astype(float) - b[col].astype(float)   # 逐句差值     p = wilcoxon(d, zero_method="wilcox").pvalue      # 配对符号秩检验     print(f"{col}: mamba={a[col].mean():.4f} base={b[col].mean():.4f} delta={d.mean():+.4f} p={p:.4f}") </code></pre>
+<pre><code>import pandas as pd
+from scipy.stats import wilcoxon
+
+mamba = pd.read_csv("results/eval_mamba_ep139_hifigan/results.csv").set_index("utt_id")
+base  = pd.read_csv("results/eval_baseline_ep140_hifigan/results.csv").set_index("utt_id")
+
+common = mamba.index.intersection(base.index)      # 只保留两边都有的句子
+a, b = mamba.loc[common], base.loc[common]
+
+for col in ("wer", "cer", "mcd_dtw"):
+    d = a[col].astype(float) - b[col].astype(float)   # 逐句差值
+    p = wilcoxon(d, zero_method="wilcox").pvalue      # 配对符号秩检验
+    print(f"{col}: mamba={a[col].mean():.4f} base={b[col].mean():.4f} delta={d.mean():+.4f} p={p:.4f}")
+</code></pre>
 
 <p>配对检验消掉的是”句子难度”这一项方差，所以比直接比均值敏感得多——MCD 上 −1.16dB 的差距在这个样本量下就能到 p=0.0015。</p>
 <p>完整脚本见 <code>wsl_env/compare_final.sh</code>。</p>

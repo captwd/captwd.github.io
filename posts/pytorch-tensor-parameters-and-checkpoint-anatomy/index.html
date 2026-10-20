@@ -51,7 +51,9 @@
 <li><strong>元数据</strong>（轻量，几百字节）：shape、stride、dtype、device、<code>requires_grad</code></li>
 <li><strong>Storage</strong>（真正连续的字节缓冲，可被多个张量共享）</li>
 </ul>
-<pre><code>x : Tensor (元数据 ~几百 B, shape=[256,172], f32, cuda:0)   storage ──→ 一整块连续内存: 256 × 172 × 4B ≈ 176 KB </code></pre>
+<pre><code>x : Tensor (元数据 ~几百 B, shape=[256,172], f32, cuda:0)
+  storage ──→ 一整块连续内存: 256 × 172 × 4B ≈ 176 KB
+</code></pre>
 
 <p><code>x.view()</code>、<code>x[:, 10]</code> 这类操作<strong>不复制数据</strong>，只新建一个指向同一 Storage 的视图（零拷贝）——这就是 forward 里”按引用传递”的物理基础。而 <code>.to(device)</code> / <code>.clone()</code> 会新建 Storage。</p>
 <p><code>nn.Parameter</code> 只是”<code>requires_grad=True</code> 的 Tensor”再挂进模块登记簿，除此之外与普通张量无异。</p>
@@ -62,7 +64,16 @@
 
 <h2 id="2-模块树：参数如何被”登记”和”编址”"><a href="#2-模块树：参数如何被”登记”和”编址”" class="headerlink" title="2. 模块树：参数如何被”登记”和”编址”"></a>2. 模块树：参数如何被”登记”和”编址”</h2><p>每个 <code>nn.Module</code> 内部有三个字典：<code>_parameters</code>（可训练）、<code>_buffers</code>（不训练但要存档，如 mel 均值/方差）、<code>_modules</code>（子模块）。构造函数里 <code>self.xxx = nn.Parameter/Module</code> 就是注册动作。</p>
 <p>整个模型是一棵树；<code>state_dict()</code> 就是<strong>深度优先摊平</strong>这棵树，路径名 = 属性名用点号连接 = 加载时的”门牌号”：</p>
-<pre><code>MatchaTTS ├── encoder (TextEncoder) ├── decoder (CFM) │   └── estimator (Decoder) │       └── down_blocks.0.0 (ConvNeXt 块) │           ├── block1.dwconv.weight        [256,1,7] │           ├── block1.norm.weight          [256] │           └── grn.gamma / grn.beta        [1,1,1024] └── mel_mean / mel_std  (buffer，标量，不训练) </code></pre>
+<pre><code>MatchaTTS
+├── encoder (TextEncoder)
+├── decoder (CFM)
+│   └── estimator (Decoder)
+│       └── down_blocks.0.0 (ConvNeXt 块)
+│           ├── block1.dwconv.weight        [256,1,7]
+│           ├── block1.norm.weight          [256]
+│           └── grn.gamma / grn.beta        [1,1,1024]
+└── mel_mean / mel_std  (buffer，标量，不训练)
+</code></pre>
 
 <p>两个关键认知：</p>
 <ol>
@@ -79,7 +90,12 @@
 
 <h2 id="3-Autograd：激活从哪来，梯度到哪去"><a href="#3-Autograd：激活从哪来，梯度到哪去" class="headerlink" title="3. Autograd：激活从哪来，梯度到哪去"></a>3. Autograd：激活从哪来，梯度到哪去</h2><p>前向时，每一步可微运算都会在<strong>动态计算图</strong>上登记一个节点，并把反向需要的中间结果（<strong>激活</strong>）挂在节点上——这就是显存里”激活”的来源，由计算图持有，<code>backward()</code> 走完即释放。</p>
 <p>梯度沿图反向流，最后由 <code>AccumulateGrad</code> 节点写进叶子参数的 <code>.grad</code>。注意这里是<strong>累加</strong>（<code>+=</code>）而不是覆盖——梯度累积能成立就是因为这个。</p>
-<pre><code>z(噪声), mu_y(条件), t ──→ estimator 前向图（每个算子=节点，节点间挂激活）                              ↓                      v_pred (B,80,T) ──→ MSE ──→ loss (标量)                              ↓ backward()                      各 Parameter 的 .grad += ...  → 图与激活释放 </code></pre>
+<pre><code>z(噪声), mu_y(条件), t ──→ estimator 前向图（每个算子=节点，节点间挂激活）
+                             ↓
+                     v_pred (B,80,T) ──→ MSE ──→ loss (标量)
+                             ↓ backward()
+                     各 Parameter 的 .grad += ...  → 图与激活释放
+</code></pre>
 
 <figure>
   <img src="/img/param-autograd.svg" alt="计算图与梯度" loading="lazy">
@@ -88,7 +104,19 @@
 
 <p><strong>为什么梯度累积数学等价</strong>：<code>.grad += 微批梯度</code> 天然求和；两个均批梯度之和 = 大批平均梯度 ×2，缩放常数被学习率吸收。且本项目用 GroupNorm/LayerNorm（无跨样本统计），batch 切分零副作用。</p>
 <h2 id="4-一个优化器步的完整数据流"><a href="#4-一个优化器步的完整数据流" class="headerlink" title="4. 一个优化器步的完整数据流"></a>4. 一个优化器步的完整数据流</h2><p>当前配置：<code>batch 32 × 累积 2</code>、<code>precision: 16-mixed</code>、<code>gradient_clip_val: 5.0</code>。</p>
-<pre><code>微批次 ① (32 样本)   H2D 拷贝(pinned) → ★前向 autocast fp16 → ★反向(×scale)   loss.backward()：.grad += 缩放后梯度（不清零、不 step）   激活随图释放 → 只有 .grad 攒着（很小）  微批次 ② (同上再来一遍)   .grad 现在持有"两个 32 样本微批之和" ≈ batch64 的梯度   至此累计 64 样本信息，尚未更新任何参数  累积边界（第 2 个微批之后）——只有这里动参数   scaler.unscale_(grads) → clip_grad_norm_(5.0) → optimizer.step() → zero_grad()   Adam 用 .grad 更新 m/v 与参数（读写常驻 ~360MB 参数区） </code></pre>
+<pre><code>微批次 ① (32 样本)
+  H2D 拷贝(pinned) → ★前向 autocast fp16 → ★反向(×scale)
+  loss.backward()：.grad += 缩放后梯度（不清零、不 step）
+  激活随图释放 → 只有 .grad 攒着（很小）
+
+微批次 ② (同上再来一遍)
+  .grad 现在持有"两个 32 样本微批之和" ≈ batch64 的梯度
+  至此累计 64 样本信息，尚未更新任何参数
+
+累积边界（第 2 个微批之后）——只有这里动参数
+  scaler.unscale_(grads) → clip_grad_norm_(5.0) → optimizer.step() → zero_grad()
+  Adam 用 .grad 更新 m/v 与参数（读写常驻 ~360MB 参数区）
+</code></pre>
 
 <p>带 ★ 的动作在显存上，其余在 CPU/RAM。<strong>参数/梯度/Adam 状态始终常驻显存</strong>，来回搬运的只有每个微批次的数据与激活。</p>
 <figure>
@@ -96,7 +124,16 @@
   <figcaption>一个优化器步：微批次 ×2 攒梯度，只在累积边界动一次参数</figcaption>
 </figure>
 
-<h2 id="5-显存地图：7-6GB-里都住了什么"><a href="#5-显存地图：7-6GB-里都住了什么" class="headerlink" title="5. 显存地图：7.6GB 里都住了什么"></a>5. 显存地图：7.6GB 里都住了什么</h2><pre><code>CUDA 上下文        ~0.4GB 参数 fp32 主本     ~90MB   (22.5M 全量) 梯度 .grad         ~90MB   (同形) Adam m+v          ~180MB   (精确 2×) 激活              弹性，随 batch/序列长度 ← 大头 分配器缓存        已释放待复用 ──────────────────────────── 若越界 → 共享 GPU 内存(系统 RAM)，走 PCIe         (16~32GB/s vs 显存 300+GB/s) → 利用率锯齿、it/s 掉数倍 </code></pre>
+<h2 id="5-显存地图：7-6GB-里都住了什么"><a href="#5-显存地图：7-6GB-里都住了什么" class="headerlink" title="5. 显存地图：7.6GB 里都住了什么"></a>5. 显存地图：7.6GB 里都住了什么</h2><pre><code>CUDA 上下文        ~0.4GB
+参数 fp32 主本     ~90MB   (22.5M 全量)
+梯度 .grad         ~90MB   (同形)
+Adam m+v          ~180MB   (精确 2×)
+激活              弹性，随 batch/序列长度 ← 大头
+分配器缓存        已释放待复用
+────────────────────────────
+若越界 → 共享 GPU 内存(系统 RAM)，走 PCIe
+        (16~32GB/s vs 显存 300+GB/s) → 利用率锯齿、it/s 掉数倍
+</code></pre>
 
 <p>batch 64 → 32 主要就动了”激活”这一项；常驻部分（蓝绿系）约 0.5GB 是固定的。</p>
 <figure>

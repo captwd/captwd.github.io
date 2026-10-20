@@ -52,7 +52,9 @@
 <li><strong>全局混合器块</strong>（Transformer / Conformer）：自注意力 + 前馈</li>
 </ul>
 <p>这次只换<strong>局部块</strong>，并且明确概念：ConvNeXt V2 是<strong>块设计</strong>而不是”卷积替代品”——1×1 投影、采样层、输出头都保留（ConvNeXt 官方自己也保留）。做法是给 Decoder 加一个开关：</p>
-<pre><code>resnet_type: "conv"          # 原版 Block1D（默认，老 checkpoint 兼容） resnet_type: "convnext_v2"   # ConvNeXt V2 单元 </code></pre>
+<pre><code>resnet_type: "conv"          # 原版 Block1D（默认，老 checkpoint 兼容）
+resnet_type: "convnext_v2"   # ConvNeXt V2 单元
+</code></pre>
 
 <p>本地算子换掉，down/mid/up/skip/Transformer 块/采样层一律不动——这是”最小可解释改动”。</p>
 <h2 id="二、ConvNeXt-V2-单元的移植与两个-bug"><a href="#二、ConvNeXt-V2-单元的移植与两个-bug" class="headerlink" title="二、ConvNeXt V2 单元的移植与两个 bug"></a>二、ConvNeXt V2 单元的移植与两个 bug</h2><p>移植了三个组件：</p>
@@ -219,9 +221,27 @@
 <li>单变量干预（这里只有 LR）配合配对检验，才能把”因果”和”相关”分开</li>
 <li><strong>漂移分析</strong>是低成本的机制探针：哪组参数漂移异常，往往就是震荡来源</li>
 </ol>
-<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="局部算子开关"><a href="#局部算子开关" class="headerlink" title="局部算子开关"></a>局部算子开关</h3><pre><code>if resnet_type == "convnext_v2":     from matcha.models.components.convnext_v2 import ConvNeXtV2ResBlock1D, ConvNeXtV2Unit1D     resnet_cls = ConvNeXtV2ResBlock1D     final_block_cls = ConvNeXtV2Unit1D elif resnet_type == "conv":     resnet_cls = ResnetBlock1D     final_block_cls = Block1D else:     raise ValueError(f"Unknown resnet_type: {resnet_type} (use 'conv' or 'convnext_v2')") </code></pre>
+<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="局部算子开关"><a href="#局部算子开关" class="headerlink" title="局部算子开关"></a>局部算子开关</h3><pre><code>if resnet_type == "convnext_v2":
+    from matcha.models.components.convnext_v2 import ConvNeXtV2ResBlock1D, ConvNeXtV2Unit1D
+    resnet_cls = ConvNeXtV2ResBlock1D
+    final_block_cls = ConvNeXtV2Unit1D
+elif resnet_type == "conv":
+    resnet_cls = ResnetBlock1D
+    final_block_cls = Block1D
+else:
+    raise ValueError(f"Unknown resnet_type: {resnet_type} (use 'conv' or 'convnext_v2')")
+</code></pre>
 
-<h3 id="LR-衰减配置（里程碑写在全局-epoch-轴）"><a href="#LR-衰减配置（里程碑写在全局-epoch-轴）" class="headerlink" title="LR 衰减配置（里程碑写在全局 epoch 轴）"></a>LR 衰减配置（里程碑写在全局 epoch 轴）</h3><pre><code>scheduler:   _target_: torch.optim.lr_scheduler.MultiStepLR   _partial_: true   milestones: [104, 114, 124, 134]   # 全局轴：衰减在 ep105/115/125/135 生效   gamma: 0.5  lightning_args:   interval: epoch   frequency: 1 </code></pre>
+<h3 id="LR-衰减配置（里程碑写在全局-epoch-轴）"><a href="#LR-衰减配置（里程碑写在全局-epoch-轴）" class="headerlink" title="LR 衰减配置（里程碑写在全局 epoch 轴）"></a>LR 衰减配置（里程碑写在全局 epoch 轴）</h3><pre><code>scheduler:
+  _target_: torch.optim.lr_scheduler.MultiStepLR
+  _partial_: true
+  milestones: [104, 114, 124, 134]   # 全局轴：衰减在 ep105/115/125/135 生效
+  gamma: 0.5
+
+lightning_args:
+  interval: epoch
+  frequency: 1
+</code></pre>
 
 <p>第一次把里程碑写成局部 epoch <code>[5, 15, 25, 35]</code>，但恢复 checkpoint 时计数器从 99 起跳，永远够不到，衰减静默失效——这一点比代码本身更值得记。</p>
 <p>相关文件：<code>matcha/models/components/decoder.py</code>、<code>configs/model/scheduler/multistep_late.yaml</code>。</p>

@@ -80,7 +80,8 @@
 </tr>
 </tbody></table>
 <p>于是有一条加性路径分解：</p>
-<pre><code>Δtotal = Δarch + Δmech + Δcontent </code></pre>
+<pre><code>Δtotal = Δarch + Δmech + Δcontent
+</code></pre>
 
 <ul>
 <li><code>Δarch = P@L(axial,0) − P@L(baseline)</code></li>
@@ -154,13 +155,24 @@
 <li>注入可以发生在不同层级（注意力 / 特征 / 损失），但每种都要配自己的匹配对照。</li>
 <li>表征分析（CKA）是预测指标之外的一条旁证：看模型对”内容”和”机制”的反应谁更大。</li>
 </ol>
-<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="三路分解"><a href="#三路分解" class="headerlink" title="三路分解"></a>三路分解</h3><pre><code>d_arch    = mean(axial_zero) - mean(baseline) d_mech    = mean(shuffled)   - mean(axial_zero) d_content = mean(real)       - mean(shuffled) assert abs((d_arch + d_mech + d_content) - (mean(real) - mean(baseline))) &lt; 1e-9 </code></pre>
+<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="三路分解"><a href="#三路分解" class="headerlink" title="三路分解"></a>三路分解</h3><pre><code>d_arch    = mean(axial_zero) - mean(baseline)
+d_mech    = mean(shuffled)   - mean(axial_zero)
+d_content = mean(real)       - mean(shuffled)
+assert abs((d_arch + d_mech + d_content) - (mean(real) - mean(baseline))) &lt; 1e-9
+</code></pre>
 
-<h3 id="软查表注入（注意力偏置）"><a href="#软查表注入（注意力偏置）" class="headerlink" title="软查表注入（注意力偏置）"></a>软查表注入（注意力偏置）</h3><pre><code># p_ij(b): 模型对 (i,j) 落在第 b 个距离 bin 的预测概率 E_soft = (p_ij * E_pmf[aa_i, aa_j, :]).sum(-1)   # 期望能量 attn_logits = attn_logits + (-E_soft)            # 低能量 -&gt; 高注意力 </code></pre>
+<h3 id="软查表注入（注意力偏置）"><a href="#软查表注入（注意力偏置）" class="headerlink" title="软查表注入（注意力偏置）"></a>软查表注入（注意力偏置）</h3><pre><code># p_ij(b): 模型对 (i,j) 落在第 b 个距离 bin 的预测概率
+E_soft = (p_ij * E_pmf[aa_i, aa_j, :]).sum(-1)   # 期望能量
+attn_logits = attn_logits + (-E_soft)            # 低能量 -&gt; 高注意力
+</code></pre>
 
-<h3 id="特征门控与物理损失"><a href="#特征门控与物理损失" class="headerlink" title="特征门控与物理损失"></a>特征门控与物理损失</h3><pre><code>pair = pair + alpha * E_soft                       # feature gating L_phys = torch.relu(E_soft - E_true - margin)      # loss-level hard constraint </code></pre>
+<h3 id="特征门控与物理损失"><a href="#特征门控与物理损失" class="headerlink" title="特征门控与物理损失"></a>特征门控与物理损失</h3><pre><code>pair = pair + alpha * E_soft                       # feature gating
+L_phys = torch.relu(E_soft - E_true - margin)      # loss-level hard constraint
+</code></pre>
 
-<h3 id="bin-对齐自检"><a href="#bin-对齐自检" class="headerlink" title="bin 对齐自检"></a>bin 对齐自检</h3><pre><code>assert np.allclose(BIN_EDGES, MODEL_BIN_EDGES) assert np.array_equal(AA_ORDER, "ACDEFGHIKLMNPQRSTVWY") </code></pre>
+<h3 id="bin-对齐自检"><a href="#bin-对齐自检" class="headerlink" title="bin 对齐自检"></a>bin 对齐自检</h3><pre><code>assert np.allclose(BIN_EDGES, MODEL_BIN_EDGES)
+assert np.array_equal(AA_ORDER, "ACDEFGHIKLMNPQRSTVWY")
+</code></pre>
 </article>
   </div>
 

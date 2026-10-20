@@ -57,7 +57,8 @@
 <h2 id="二、跑起来：参考音频、文本、时长的三角关系"><a href="#二、跑起来：参考音频、文本、时长的三角关系" class="headerlink" title="二、跑起来：参考音频、文本、时长的三角关系"></a>二、跑起来：参考音频、文本、时长的三角关系</h2><p>跑通了，但踩了两个坑，正好把问题暴露出来。</p>
 <h3 id="坑-1：参考音频被截断，但参考文本没截"><a href="#坑-1：参考音频被截断，但参考文本没截" class="headerlink" title="坑 1：参考音频被截断，但参考文本没截"></a>坑 1：参考音频被截断，但参考文本没截</h3><p><code>utils_infer.py:325</code> 会把超过 12s 的参考音频<strong>自动截短到 12s</strong>，但如果你给的 <code>ref_text</code> 是整段 23s 的转写，两者就对不上了。</p>
 <p>F5 的时长是这么估的（<code>utils_infer.py:503</code>）：</p>
-<pre><code>duration = ref_audio_len + int(ref_audio_len / ref_text_len * gen_text_len / local_speed) </code></pre>
+<pre><code>duration = ref_audio_len + int(ref_audio_len / ref_text_len * gen_text_len / local_speed)
+</code></pre>
 
 <p><code>ref_audio_len</code> 只有 12s 的帧数，<code>ref_text_len</code> 却是 23s 文本的长度 → 每字节对应帧数被低估约一半 → 生成只有应有长度的一半。<strong>11s 的文本生成了 5s，听起来飞快。</strong></p>
 <h3 id="坑-2：参考有停顿、文本又短，反而生成超长"><a href="#坑-2：参考有停顿、文本又短，反而生成超长" class="headerlink" title="坑 2：参考有停顿、文本又短，反而生成超长"></a>坑 2：参考有停顿、文本又短，反而生成超长</h3><p>换成另一段 10.14s 的参考，文本只有 16 字。一量发现：<strong>有效人声只有 6.9s，中间夹了 3.2s 停顿</strong>。模型按”10.14s / 16 字”估语速，于是 50 字的生成直接拖到 <strong>30.6s</strong>。</p>
@@ -171,7 +172,20 @@
 <p>后果就是：<strong>音色、内容、韵律、时长全部纠缠在同一份 in-context 表示里，无法独立控制</strong>。想”同音色、只改语速”，F5 做不到。</p>
 <p>这既是它目前不好控的原因，<strong>也正是最容易切入做改进的地方</strong>。</p>
 <h2 id="七、我的想法：解耦多预测头-→-条件化下游生成器"><a href="#七、我的想法：解耦多预测头-→-条件化下游生成器" class="headerlink" title="七、我的想法：解耦多预测头 → 条件化下游生成器"></a>七、我的想法：解耦多预测头 → 条件化下游生成器</h2><p>思路一句话：<strong>先解耦地预测出韵律（时长、音高、能量……），再把这些预测当成条件，塞给下游的流匹配生成器。</strong></p>
-<h3 id="1-架构"><a href="#1-架构" class="headerlink" title="1. 架构"></a>1. 架构</h3><pre><code>              ┌──────────────┐ text  ───────▶│  文本编码器   │──┐               └──────────────┘  │               ┌──────────────┐  │   ┌──────────────────────┐ ref   ───────▶│ 参考/风格编码 │──┼──▶│ 多个预测头            │               └──────────────┘  │   │ duration / F0 / energy│                                 │   │ (+ style/emotion)     │──▶ 条件向量                                 │   └──────────────────────┘                                 │              │                               文本             ▼（作为条件注入）                       ┌──────────────────────────────────┐                       │   流匹配生成器 (DiT / CFM)         │──▶ mel ──▶ vocoder                       └──────────────────────────────────┘ </code></pre>
+<h3 id="1-架构"><a href="#1-架构" class="headerlink" title="1. 架构"></a>1. 架构</h3><pre><code>                 ┌──────────────┐
+   text  ───────▶│  文本编码器   │──┐
+                 └──────────────┘  │
+                 ┌──────────────┐  │   ┌──────────────────────┐
+   ref   ───────▶│ 参考/风格编码 │──┼──▶│ 多个预测头            │
+                 └──────────────┘  │   │ duration / F0 / energy│
+                                   │   │ (+ style/emotion)     │──▶ 条件向量
+                                   │   └──────────────────────┘
+                                   │              │
+                                 文本             ▼（作为条件注入）
+                         ┌──────────────────────────────────┐
+                         │   流匹配生成器 (DiT / CFM)         │──▶ mel ──▶ vocoder
+                         └──────────────────────────────────┘
+</code></pre>
 
 <p>它其实是把 F5 缺失的 <strong>duration model</strong> 补回来，并且顺便把 <strong>variance adaptor</strong>（FastSpeech 2 的时长/音高/能量预测器）搬进流匹配的零样本框架里。</p>
 <h3 id="2-训练-推理"><a href="#2-训练-推理" class="headerlink" title="2. 训练 / 推理"></a>2. 训练 / 推理</h3><ul>
@@ -200,17 +214,46 @@
 <li>难点不在”能不能加头”，而在<strong>监督来源、训练/推理一致、以及解耦不泄漏</strong>——把这三件解决，就是一个像样的课题。</li>
 <li><strong>解耦泄漏在数据层面有个便宜的抓手</strong>：语速扰动增广（保音高的 tempo），每句随机一个伸缩因子、数据翻倍以内就能打破”语速↔音色”的相关性。</li>
 </ol>
-<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="F5-的时长估算（要替换的目标）"><a href="#F5-的时长估算（要替换的目标）" class="headerlink" title="F5 的时长估算（要替换的目标）"></a>F5 的时长估算（要替换的目标）</h3><pre><code># utils_infer.py:503 ref_text_len = len(ref_text.encode("utf-8")) gen_text_len = len(gen_text.encode("utf-8")) duration = ref_audio_len + int(ref_audio_len / ref_text_len * gen_text_len / local_speed) </code></pre>
+<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="F5-的时长估算（要替换的目标）"><a href="#F5-的时长估算（要替换的目标）" class="headerlink" title="F5 的时长估算（要替换的目标）"></a>F5 的时长估算（要替换的目标）</h3><pre><code># utils_infer.py:503
+ref_text_len = len(ref_text.encode("utf-8"))
+gen_text_len = len(gen_text.encode("utf-8"))
+duration = ref_audio_len + int(ref_audio_len / ref_text_len * gen_text_len / local_speed)
+</code></pre>
 
-<h3 id="参考音频-12s-会被截断（坑的来源）"><a href="#参考音频-12s-会被截断（坑的来源）" class="headerlink" title="参考音频 >12s 会被截断（坑的来源）"></a>参考音频 &gt;12s 会被截断（坑的来源）</h3><pre><code># utils_infer.py:325 if len(non_silent_wave) &gt; 6000 and len(non_silent_wave + non_silent_seg) &gt; 12000:     show_info("Audio is over 12s, clipping short. (1)")     break </code></pre>
+<h3 id="参考音频-12s-会被截断（坑的来源）"><a href="#参考音频-12s-会被截断（坑的来源）" class="headerlink" title="参考音频 >12s 会被截断（坑的来源）"></a>参考音频 &gt;12s 会被截断（坑的来源）</h3><pre><code># utils_infer.py:325
+if len(non_silent_wave) &gt; 6000 and len(non_silent_wave + non_silent_seg) &gt; 12000:
+    show_info("Audio is over 12s, clipping short. (1)")
+    break
+</code></pre>
 
-<h3 id="Sway-Sampling：改的是流时间-t-的分布"><a href="#Sway-Sampling：改的是流时间-t-的分布" class="headerlink" title="Sway Sampling：改的是流时间 t 的分布"></a>Sway Sampling：改的是流时间 t 的分布</h3><pre><code># cfm.py:263 if sway_sampling_coef is not None:     t = t + sway_sampling_coef * (torch.cos(torch.pi / 2 * t) - 1 + t) </code></pre>
+<h3 id="Sway-Sampling：改的是流时间-t-的分布"><a href="#Sway-Sampling：改的是流时间-t-的分布" class="headerlink" title="Sway Sampling：改的是流时间 t 的分布"></a>Sway Sampling：改的是流时间 t 的分布</h3><pre><code># cfm.py:263
+if sway_sampling_coef is not None:
+    t = t + sway_sampling_coef * (torch.cos(torch.pi / 2 * t) - 1 + t)
+</code></pre>
 
-<h3 id="RoPE-的注入点（普通、未归一化）"><a href="#RoPE-的注入点（普通、未归一化）" class="headerlink" title="RoPE 的注入点（普通、未归一化）"></a>RoPE 的注入点（普通、未归一化）</h3><pre><code># dit.py:418 → block → modules.py:601 rope = self.rotary_embed.forward_from_seq_len(seq_len) query = apply_rotary_pos_emb(query, freqs, q_xpos_scale) key   = apply_rotary_pos_emb(key,   freqs, k_xpos_scale) </code></pre>
+<h3 id="RoPE-的注入点（普通、未归一化）"><a href="#RoPE-的注入点（普通、未归一化）" class="headerlink" title="RoPE 的注入点（普通、未归一化）"></a>RoPE 的注入点（普通、未归一化）</h3><pre><code># dit.py:418 → block → modules.py:601
+rope = self.rotary_embed.forward_from_seq_len(seq_len)
+query = apply_rotary_pos_emb(query, freqs, q_xpos_scale)
+key   = apply_rotary_pos_emb(key,   freqs, k_xpos_scale)
+</code></pre>
 
-<h3 id="注入一个条件（多头的目标形态，仿时间步-t）"><a href="#注入一个条件（多头的目标形态，仿时间步-t）" class="headerlink" title="注入一个条件（多头的目标形态，仿时间步 t）"></a>注入一个条件（多头的目标形态，仿时间步 t）</h3><pre><code># 条件向量 c 与时间嵌入一样进入 AdaLN 调制 / 或拼进输入 x = self.input_embed(torch.cat((x, cond, text_embed, duration_emb, f0_emb), dim=-1)) </code></pre>
+<h3 id="注入一个条件（多头的目标形态，仿时间步-t）"><a href="#注入一个条件（多头的目标形态，仿时间步-t）" class="headerlink" title="注入一个条件（多头的目标形态，仿时间步 t）"></a>注入一个条件（多头的目标形态，仿时间步 t）</h3><pre><code># 条件向量 c 与时间嵌入一样进入 AdaLN 调制 / 或拼进输入
+x = self.input_embed(torch.cat((x, cond, text_embed, duration_emb, f0_emb), dim=-1))
+</code></pre>
 
-<h3 id="语速扰动增广（务必保音高）"><a href="#语速扰动增广（务必保音高）" class="headerlink" title="语速扰动增广（务必保音高）"></a>语速扰动增广（务必保音高）</h3><pre><code># 增广只用保音高的 tempo；sox/torchaudio 的 speed 变速又变调，会污染音色标签 import torch, torchaudio  wav, sr = torchaudio.load("utt.wav")     # (C, T)  # 方式一：sox tempo（&gt;1 变快，&lt;1 变慢） aug, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, [["tempo", "1.15"]])  # 方式二：phase vocoder（纯 torch 实现，不依赖 sox，Windows 上更稳） spec = torch.stft(wav, 1024, hop_length=256, return_complex=True) aug_spec = torchaudio.functional.phase_vocoder(spec, rate=1.15) aug = torch.istft(aug_spec, 1024, hop_length=256) </code></pre>
+<h3 id="语速扰动增广（务必保音高）"><a href="#语速扰动增广（务必保音高）" class="headerlink" title="语速扰动增广（务必保音高）"></a>语速扰动增广（务必保音高）</h3><pre><code># 增广只用保音高的 tempo；sox/torchaudio 的 speed 变速又变调，会污染音色标签
+import torch, torchaudio
+
+wav, sr = torchaudio.load("utt.wav")     # (C, T)
+
+# 方式一：sox tempo（&gt;1 变快，&lt;1 变慢）
+aug, _ = torchaudio.sox_effects.apply_effects_tensor(wav, sr, [["tempo", "1.15"]])
+
+# 方式二：phase vocoder（纯 torch 实现，不依赖 sox，Windows 上更稳）
+spec = torch.stft(wav, 1024, hop_length=256, return_complex=True)
+aug_spec = torchaudio.functional.phase_vocoder(spec, rate=1.15)
+aug = torch.istft(aug_spec, 1024, hop_length=256)
+</code></pre>
 </article>
   </div>
 

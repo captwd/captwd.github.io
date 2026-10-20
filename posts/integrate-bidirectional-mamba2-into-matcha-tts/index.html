@@ -47,7 +47,10 @@
 </blockquote>
 <p>接上一篇，环境好了之后，这一篇讲真正的模型改造：把 Matcha-TTS 里 U-Net 的 Self-Attention 块换成双向 Mamba2，尽量做到”只换混合器、不碰框架”，并记录一个几乎所有人在把 Mamba 集成进已有模型时都会踩的初始化陷阱。</p>
 <h2 id="一、先看清要换的是哪一块"><a href="#一、先看清要换的是哪一块" class="headerlink" title="一、先看清要换的是哪一块"></a>一、先看清要换的是哪一块</h2><p>Matcha-TTS 的声学骨干（estimator）是一个 1D U-Net，结构可以简写为：</p>
-<pre><code>每级 down 块 = [ResnetBlock1D, n × 全局混合器块, 下采样] mid 段      = [ResnetBlock1D, n × 全局混合器块] × num_mid_blocks 每级 up 块   = [ResnetBlock1D, n × 全局混合器块, 上采样]（含 skip 拼接） </code></pre>
+<pre><code>每级 down 块 = [ResnetBlock1D, n × 全局混合器块, 下采样]
+mid 段      = [ResnetBlock1D, n × 全局混合器块] × num_mid_blocks
+每级 up 块   = [ResnetBlock1D, n × 全局混合器块, 上采样]（含 skip 拼接）
+</code></pre>
 
 <p>其中：</p>
 <ul>
@@ -57,17 +60,28 @@
 <p>所以最小改动、语义最对齐的替换对象就是<strong>全局混合器块</strong>：attention 和 SSM 都是”每个位置看到整条序列”的算子，做 1:1 替换不会改变感受野的性质；而换 ResnetBlock 则等于把”局部卷积”改成了”全局扫描”，动静大得多。</p>
 <p>更进一步，这个仓库的 <code>Decoder.get_block()</code> 本来就是一个按名字构建混合器的工厂，已经支持 <code>"transformer"</code> / <code>"conformer"</code> 两种。加 Mamba 只需要加第三个分支——这也决定了整个改动可以控制在几十行。</p>
 <p>接口契约（从代码注释里抄下来的）：</p>
-<pre><code># 混合器块被调用的方式 x = block(hidden_states=x,        # (B, T, C)           attention_mask=mask,    # (B, T)           timestep=t)             # (B, time_embed_dim) # 返回仍然是 (B, T, C) </code></pre>
+<pre><code># 混合器块被调用的方式
+x = block(hidden_states=x,        # (B, T, C)
+          attention_mask=mask,    # (B, T)
+          timestep=t)             # (B, time_embed_dim)
+# 返回仍然是 (B, T, C)
+</code></pre>
 
 <h2 id="二、MambaBlock1D-的三个设计决策"><a href="#二、MambaBlock1D-的三个设计决策" class="headerlink" title="二、MambaBlock1D 的三个设计决策"></a>二、MambaBlock1D 的三个设计决策</h2><h3 id="1-双向化（最关键）"><a href="#1-双向化（最关键）" class="headerlink" title="1. 双向化（最关键）"></a>1. 双向化（最关键）</h3><p>Mamba 是<strong>因果单向</strong>序列模型：t 时刻的状态只依赖 0..t。但 TTS 的声学生成是非自回归的（整条 mel 一起去噪），每个位置都需要双向上下文。标准做法是正/反各扫一遍再融合：</p>
-<pre><code>x = self.norm(hidden_states) y = self.mamba_fwd(x) if self.mamba_bwd is not None:     y = y + self.mamba_bwd(x.flip(1).contiguous()).flip(1).contiguous() return hidden_states + self.gamma * self.dropout(y) </code></pre>
+<pre><code>x = self.norm(hidden_states)
+y = self.mamba_fwd(x)
+if self.mamba_bwd is not None:
+    y = y + self.mamba_bwd(x.flip(1).contiguous()).flip(1).contiguous()
+return hidden_states + self.gamma * self.dropout(y)
+</code></pre>
 
 <ul>
 <li>两个方向用<strong>两套独立参数</strong>（不共享权重）</li>
 <li><code>.contiguous()</code> 是给 CUDA kernel 用的，翻转后的张量不连续会直接报错</li>
 </ul>
 <h3 id="2-LayerScale-零初始化"><a href="#2-LayerScale-零初始化" class="headerlink" title="2. LayerScale 零初始化"></a>2. LayerScale 零初始化</h3><p>输出分支乘一个逐通道的 <code>gamma</code>（初始 1e-6）：</p>
-<pre><code>self.gamma = nn.Parameter(layerscale * torch.ones(dim)) </code></pre>
+<pre><code>self.gamma = nn.Parameter(layerscale * torch.ones(dim))
+</code></pre>
 
 <p>这样训练起点时整个块的输出约等于零，主干保持恒等映射，梯度再通过 gamma 逐步”打开”这条分支。这类全局混合器如果随机初始化直接怼进残差主干，早期会注入很大的噪声；零初始化是稳定训练期的廉价保险。</p>
 <p>有一个很直观的观测证据：训练第 0 轮验证时 MCD（mel 倒谱失真）高达 <strong>110dB</strong>，第 4 轮就掉到 44 附近——前几轮 decoder 分支近似关闭、只靠残差主干输出，正是 LayerScale 在起作用。</p>
@@ -107,15 +121,45 @@
 </tr>
 </tbody></table>
 <p>也就是说：<strong>模型能跑，loss 也会降，但你其实是在一个被削弱的 Mamba 上训练</strong>。正确做法是让初始化循环跳过整个 Mamba 子树：</p>
-<pre><code># 收集所有 MambaBlock1D 子树成员的 id；Windows 上 mamba_ssm 导入失败 = 空集合 try:     from matcha.models.components.mamba_block import MambaBlock1D      mamba_ids = {         id(sub)         for m in self.modules()         if isinstance(m, MambaBlock1D)         for sub in m.modules()     } except ImportError:     mamba_ids = set()  for m in self.modules():     if id(m) in mamba_ids:         continue     # ... 原有的 Conv1d / GroupNorm / Linear 初始化 </code></pre>
+<pre><code># 收集所有 MambaBlock1D 子树成员的 id；Windows 上 mamba_ssm 导入失败 = 空集合
+try:
+    from matcha.models.components.mamba_block import MambaBlock1D
+
+    mamba_ids = {
+        id(sub)
+        for m in self.modules()
+        if isinstance(m, MambaBlock1D)
+        for sub in m.modules()
+    }
+except ImportError:
+    mamba_ids = set()
+
+for m in self.modules():
+    if id(m) in mamba_ids:
+        continue
+    # ... 原有的 Conv1d / GroupNorm / Linear 初始化
+</code></pre>
 
 <p>验证这件事是否生效，也有个简单判据：Mamba2 深度卷积的 bias 默认是<strong>非零</strong>的，如果它被外部初始化扫过，就会变成精确的 0。所以测试里断言 <code>conv1d.bias.abs().sum() &gt; 0</code> 即可证明跳过逻辑生效。</p>
 <p>另外一个工程细节：整个 <code>mamba_ssm</code> 采用<strong>惰性导入</strong>（只在真正构建 mamba 块时才 import），这样 Windows 上没有 mamba-ssm 的环境也能正常 import 这个仓库、跑原路径。</p>
 <h2 id="四、配置与使用"><a href="#四、配置与使用" class="headerlink" title="四、配置与使用"></a>四、配置与使用</h2><p>新增一个配置组，只改三段 block 类型，其他一概不动：</p>
-<pre><code># configs/model/decoder/mamba.yaml defaults:   - default.yaml   - _self_  down_block_type: mamba mid_block_type: mamba up_block_type: mamba </code></pre>
+<pre><code># configs/model/decoder/mamba.yaml
+defaults:
+  - default.yaml
+  - _self_
+
+down_block_type: mamba
+mid_block_type: mamba
+up_block_type: mamba
+</code></pre>
 
 <p>对应三种用法：</p>
-<pre><code># 三段全换 python matcha/train.py experiment=ljspeech_min_memory model/decoder=mamba  # 只换 mid 段（最小步验证链路，mid 只有 2 个块） python matcha/train.py experiment=ljspeech_min_memory model/decoder.mid_block_type=mamba </code></pre>
+<pre><code># 三段全换
+python matcha/train.py experiment=ljspeech_min_memory model/decoder=mamba
+
+# 只换 mid 段（最小步验证链路，mid 只有 2 个块）
+python matcha/train.py experiment=ljspeech_min_memory model/decoder.mid_block_type=mamba
+</code></pre>
 
 <p>注意 mamba 变体与仓库里已有的 <code>resnet_type</code>（<code>conv</code> / <code>convnext_v2</code>）是<strong>正交</strong>的：局部块仍然是你想要的原始卷积，只换全局混合器。</p>
 <h2 id="五、验证清单：别等训练完才发现不对"><a href="#五、验证清单：别等训练完才发现不对" class="headerlink" title="五、验证清单：别等训练完才发现不对"></a>五、验证清单：别等训练完才发现不对</h2><p>换完骨干后我做了 15 项验证，覆盖从单元行为到端到端训练步，值得列一下作为模板：</p>
@@ -155,11 +199,48 @@
 <li>全局 weight init 会覆盖 Mamba2 的特殊初始化，要跳过整棵子树保护它，再用 conv bias 非零做断言</li>
 <li>惰性导入 + 配置开关，保证新旧路径都能活</li>
 </ul>
-<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="双向块本体"><a href="#双向块本体" class="headerlink" title="双向块本体"></a>双向块本体</h3><pre><code>class MambaBlock1D(nn.Module):     def __init__(self, dim, dropout=0.0, d_state=64, d_conv=4, expand=2,                  bidirectional=True, layerscale=1e-6):         super().__init__()         from mamba_ssm import Mamba2          # 惰性导入，Windows 上不影响其它路径          self.norm = nn.LayerNorm(dim)         self.mamba_fwd = Mamba2(d_model=dim, d_state=d_state, d_conv=d_conv, expand=expand)         self.mamba_bwd = (             Mamba2(d_model=dim, d_state=d_state, d_conv=d_conv, expand=expand) if bidirectional else None         )         self.dropout = nn.Dropout(dropout)         self.gamma = nn.Parameter(layerscale * torch.ones(dim))   # LayerScale，初始 1e-6      def forward(self, hidden_states, attention_mask=None, encoder_hidden_states=None,                 encoder_attention_mask=None, timestep=None, cross_attention_kwargs=None,                 class_labels=None):         x = self.norm(hidden_states)         y = self.mamba_fwd(x)         if self.mamba_bwd is not None:             # 反序扫描再翻回原位；.contiguous() 是 CUDA kernel 要求的             y = y + self.mamba_bwd(x.flip(1).contiguous()).flip(1).contiguous()         return hidden_states + self.gamma * self.dropout(y) </code></pre>
+<h2 id="关键代码"><a href="#关键代码" class="headerlink" title="关键代码"></a>关键代码</h2><h3 id="双向块本体"><a href="#双向块本体" class="headerlink" title="双向块本体"></a>双向块本体</h3><pre><code>class MambaBlock1D(nn.Module):
+    def __init__(self, dim, dropout=0.0, d_state=64, d_conv=4, expand=2,
+                 bidirectional=True, layerscale=1e-6):
+        super().__init__()
+        from mamba_ssm import Mamba2          # 惰性导入，Windows 上不影响其它路径
 
-<h3 id="工厂里加一个分支"><a href="#工厂里加一个分支" class="headerlink" title="工厂里加一个分支"></a>工厂里加一个分支</h3><pre><code>elif block_type == "mamba":     from matcha.models.components.mamba_block import MambaBlock1D     block = MambaBlock1D(dim=dim, dropout=dropout) </code></pre>
+        self.norm = nn.LayerNorm(dim)
+        self.mamba_fwd = Mamba2(d_model=dim, d_state=d_state, d_conv=d_conv, expand=expand)
+        self.mamba_bwd = (
+            Mamba2(d_model=dim, d_state=d_state, d_conv=d_conv, expand=expand) if bidirectional else None
+        )
+        self.dropout = nn.Dropout(dropout)
+        self.gamma = nn.Parameter(layerscale * torch.ones(dim))   # LayerScale，初始 1e-6
 
-<h3 id="初始化时跳过-Mamba-子树"><a href="#初始化时跳过-Mamba-子树" class="headerlink" title="初始化时跳过 Mamba 子树"></a>初始化时跳过 Mamba 子树</h3><pre><code>def initialize_weights(self):     try:         from matcha.models.components.mamba_block import MambaBlock1D         mamba_ids = {id(sub) for m in self.modules() if isinstance(m, MambaBlock1D) for sub in m.modules()}     except ImportError:         mamba_ids = set()      for m in self.modules():         if id(m) in mamba_ids:             continue         # ... 原有的 Conv1d / GroupNorm / Linear 初始化 </code></pre>
+    def forward(self, hidden_states, attention_mask=None, encoder_hidden_states=None,
+                encoder_attention_mask=None, timestep=None, cross_attention_kwargs=None,
+                class_labels=None):
+        x = self.norm(hidden_states)
+        y = self.mamba_fwd(x)
+        if self.mamba_bwd is not None:
+            # 反序扫描再翻回原位；.contiguous() 是 CUDA kernel 要求的
+            y = y + self.mamba_bwd(x.flip(1).contiguous()).flip(1).contiguous()
+        return hidden_states + self.gamma * self.dropout(y)
+</code></pre>
+
+<h3 id="工厂里加一个分支"><a href="#工厂里加一个分支" class="headerlink" title="工厂里加一个分支"></a>工厂里加一个分支</h3><pre><code>elif block_type == "mamba":
+    from matcha.models.components.mamba_block import MambaBlock1D
+    block = MambaBlock1D(dim=dim, dropout=dropout)
+</code></pre>
+
+<h3 id="初始化时跳过-Mamba-子树"><a href="#初始化时跳过-Mamba-子树" class="headerlink" title="初始化时跳过 Mamba 子树"></a>初始化时跳过 Mamba 子树</h3><pre><code>def initialize_weights(self):
+    try:
+        from matcha.models.components.mamba_block import MambaBlock1D
+        mamba_ids = {id(sub) for m in self.modules() if isinstance(m, MambaBlock1D) for sub in m.modules()}
+    except ImportError:
+        mamba_ids = set()
+
+    for m in self.modules():
+        if id(m) in mamba_ids:
+            continue
+        # ... 原有的 Conv1d / GroupNorm / Linear 初始化
+</code></pre>
 
 <p>完整实现见 <code>matcha/models/components/mamba_block.py</code> 和 <code>matcha/models/components/decoder.py</code>。</p>
 </article>

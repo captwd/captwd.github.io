@@ -46,10 +46,33 @@
 <p><strong>系列 · Matcha-TTS 训练手记</strong> ｜ <a href="/notes/#journal">目录</a> ｜ 上一篇：<a href="/posts/dl-hardware-primer/">硬件原理入门</a> ｜ 下一篇：<a href="/posts/pytorch-tensor-parameters-and-checkpoint-anatomy/">PyTorch 参数解剖</a></p>
 </blockquote>
 <p>上一篇讲了原理，这一篇是应用：拿一次真实训练的监测画面，逐项解释每个数字背后的流水线状态。画面快照（Windows 训练、有效 batch 64 时代）：</p>
-<pre><code>CPU   33% @3.19GHz 内存  12.9 / 15.2GB (85%) 磁盘  2% GPU   46%（专用显存 7.6GB） </code></pre>
+<pre><code>CPU   33% @3.19GHz
+内存  12.9 / 15.2GB (85%)
+磁盘  2%
+GPU   46%（专用显存 7.6GB）
+</code></pre>
 
 <p>配套的流水线是：离线预处理缓存 + 梯度累积 + <code>num_workers</code> + pinned memory + 每 epoch 存 258MB checkpoint。结论先给：<strong>瓶颈不是某个设备的算力，而是”链路延迟”——四部件都半闲</strong>。</p>
-<h2 id="1-一条数据的完整旅程"><a href="#1-一条数据的完整旅程" class="headerlink" title="1. 一条数据的完整旅程"></a>1. 一条数据的完整旅程</h2><pre><code>磁盘(NVMe, 2%)   └ 离线缓存 .npy / phonemes.json（首轮读一次，之后进页缓存）   └ 每 epoch 末：写 258MB checkpoint + tensorboard 追加事件         ↓ 内存(12.9/15.2GB)   ├ 页缓存（数据集副本 ← 磁盘只有 2% 的原因）   ├ dataloader worker ×2（各 ~780MB）   ├ 主进程 python+torch   └ pinned 锁页缓冲         ↓ CPU(33%)   ├ 主进程（GIL 单线程）：训练循环、组装参数、发射 CUDA kernel、日志   ├ worker ×2：读页缓存 → collate 补零 → 序列化经共享内存传主进程   └ 每 5 epoch：matplotlib 画图 + DTW-MCD 计算（尖峰）         ↓ GPU(46%, 7.6GB)   ├ 前向/反向/优化器步（真实计算）   ├ 常驻 ~270MiB（参数+梯度+Adam）   └ 其余时间在等主进程喂数据 </code></pre>
+<h2 id="1-一条数据的完整旅程"><a href="#1-一条数据的完整旅程" class="headerlink" title="1. 一条数据的完整旅程"></a>1. 一条数据的完整旅程</h2><pre><code>磁盘(NVMe, 2%)
+  └ 离线缓存 .npy / phonemes.json（首轮读一次，之后进页缓存）
+  └ 每 epoch 末：写 258MB checkpoint + tensorboard 追加事件
+        ↓
+内存(12.9/15.2GB)
+  ├ 页缓存（数据集副本 ← 磁盘只有 2% 的原因）
+  ├ dataloader worker ×2（各 ~780MB）
+  ├ 主进程 python+torch
+  └ pinned 锁页缓冲
+        ↓
+CPU(33%)
+  ├ 主进程（GIL 单线程）：训练循环、组装参数、发射 CUDA kernel、日志
+  ├ worker ×2：读页缓存 → collate 补零 → 序列化经共享内存传主进程
+  └ 每 5 epoch：matplotlib 画图 + DTW-MCD 计算（尖峰）
+        ↓
+GPU(46%, 7.6GB)
+  ├ 前向/反向/优化器步（真实计算）
+  ├ 常驻 ~270MiB（参数+梯度+Adam）
+  └ 其余时间在等主进程喂数据
+</code></pre>
 
 <p>能量在内存里循环，磁盘基本退休。</p>
 <figure>
@@ -142,7 +165,13 @@
 </tr>
 </tbody></table>
 <p>这正是<strong>离线预处理缓存</strong>的红利：磁盘从”持续工作部件”变成只负责 checkpoint 的”仓库管理员”。如果删掉缓存重训一轮，你会看到磁盘常年 10-30%、CPU 多一摊 mel 计算。</p>
-<h2 id="5-流水线视角：瓶颈在哪，还有哪些杠杆"><a href="#5-流水线视角：瓶颈在哪，还有哪些杠杆" class="headerlink" title="5. 流水线视角：瓶颈在哪，还有哪些杠杆"></a>5. 流水线视角：瓶颈在哪，还有哪些杠杆</h2><pre><code>磁盘 2%   已退休（页缓存接管） 内存 85%  够用但贴警戒线 CPU  33%  指挥 + 喂食 GPU  46%  等喂数据 串行链：数据 → 批组装 → kernel 发射 → 计算 链上每一环都半闲 = 瓶颈是"链路延迟"而非"某环节算力" </code></pre>
+<h2 id="5-流水线视角：瓶颈在哪，还有哪些杠杆"><a href="#5-流水线视角：瓶颈在哪，还有哪些杠杆" class="headerlink" title="5. 流水线视角：瓶颈在哪，还有哪些杠杆"></a>5. 流水线视角：瓶颈在哪，还有哪些杠杆</h2><pre><code>磁盘 2%   已退休（页缓存接管）
+内存 85%  够用但贴警戒线
+CPU  33%  指挥 + 喂食
+GPU  46%  等喂数据
+串行链：数据 → 批组装 → kernel 发射 → 计算
+链上每一环都半闲 = 瓶颈是"链路延迟"而非"某环节算力"
+</code></pre>
 
 <figure>
   <img src="/img/hw-health-map.svg" alt="四部件健康度画像" loading="lazy">
