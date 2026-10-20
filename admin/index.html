@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>编辑研究笔记 · captwd</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="./editor.css">
+</head>
+<body class="editor-page">
+  <header class="site-head"><a class="brand" href="../notes/"><span class="brand-dot"></span><span class="brand-name">captwd<span class="brand-slash"> / </span>波形笔记</span></a><nav class="site-nav"><a href="../notes/">返回研究笔记 ↗</a></nav></header>
+  <main class="editor-shell">
+    <div class="editor-kicker"><span class="editor-pulse"></span> FIELD NOTES / EDITOR</div>
+    <h1>把笔记，再改好一点。</h1>
+    <p class="editor-lede">选择文章，直接修改正文，预览后发布。标题、摘要与文章地址保持原样。</p>
+
+    <section class="editor-panel" id="auth-panel" aria-labelledby="auth-title">
+      <div class="editor-panel-heading"><span>01 / 身份验证</span><h2 id="auth-title">连接 GitHub</h2></div>
+      <p>请使用 <strong>captwd</strong> 账号的细粒度令牌。只给 <code>captwd/wave</code> 与 <code>captwd/captwd.github.io</code> 两个仓库授予 Contents 读写权限。令牌只保留在当前页面内存中，关闭页面即清除。</p>
+      <form id="auth-form" class="editor-auth-form">
+        <label for="github-token">GitHub 令牌</label>
+        <div class="editor-auth-row"><input id="github-token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required placeholder="github_pat_…"><button type="submit">连接</button></div>
+      </form>
+      <a class="editor-help-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">创建细粒度令牌 ↗</a>
+    </section>
+
+    <section class="editor-panel" id="work-panel" aria-labelledby="work-title" hidden>
+      <div class="editor-panel-heading"><span>02 / 正文编辑</span><div class="editor-title-row"><h2 id="work-title">编辑文章</h2><button id="disconnect" type="button" class="editor-quiet">断开连接</button></div></div>
+      <div class="editor-picker"><label for="article-picker">选择研究笔记</label><select id="article-picker"></select><button id="load-article" type="button">打开正文</button></div>
+      <div id="edit-area" hidden>
+        <div class="editor-toolbar"><div><h3 id="editing-title"></h3><p id="editing-path"></p></div><div class="editor-toolbar-actions"><button id="toggle-preview" type="button" class="editor-quiet">预览</button><button id="publish-article" type="button">发布修改</button></div></div>
+        <p class="editor-tip">直接点击正文修改文字；可用 Ctrl+B 加粗。粘贴内容会作为纯文字插入。预览后再发布。</p>
+        <iframe id="article-frame" title="文章正文编辑区" sandbox="allow-same-origin"></iframe>
+      </div>
+    </section>
+    <p id="editor-status" role="status" aria-live="polite"></p>
+  </main>
+  <script src="../js/posts.js"></script>
+  <script src="./editor.js"></script>
+</body>
+</html>

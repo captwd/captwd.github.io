@@ -106,6 +106,15 @@
       state.query = libraryPreferences.query = input.value;
       state.apply();
     });
+    document.getElementById('notes-search-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (input.value.trim().toLocaleLowerCase('en-US') === 'zhoukangwen') {
+        window.location.assign(new URL('admin/', root));
+        return;
+      }
+      state.query = libraryPreferences.query = input.value;
+      state.apply();
+    });
 
     if (years) {
       const yearValues = [...new Set(posts.map((post) => String(post.date || '').slice(0, 4)).filter((year) => /^\d{4}$/.test(year)))].sort().reverse();

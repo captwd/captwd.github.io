@@ -1168,3 +1168,8 @@ body.notes-page .notes-subscribe{display:flex;align-items:center;justify-content
 @media(max-width:760px){.ridge-note.is-featured .ridge-note-label{opacity:1;visibility:visible;pointer-events:auto;}.ridge-note.is-featured .ridge-note-jewel{transform:scale(1.08);box-shadow:0 0 26px var(--story-color);}}
 
 @media(max-width:760px){.ridge-note.label-above .ridge-note-label{top:auto;bottom:calc(100% + 7px);left:-10px;right:auto;transform:none;}.ridge-note.label-above.label-left .ridge-note-label{left:auto;right:-10px;}}
+
+/* The search action is explicit, while typing still filters the journal immediately. */
+body.notes-page .notes-search-submit{flex:0 0 auto;align-self:stretch;margin:5px -8px 5px 0;padding:0 14px;border:1px solid #a1f9d543;border-radius:4px;background:#153029;color:#b8e7cf;font:11px var(--sans);cursor:pointer;transition:background .18s,border-color .18s;}
+body.notes-page .notes-search-submit:hover,body.notes-page .notes-search-submit:focus-visible{background:#235341;border-color:#a1f9d595;outline:none;}
+@media(max-width:420px){body.notes-page .notes-search-submit{margin-right:-5px;padding:0 9px;font-size:10px;}}

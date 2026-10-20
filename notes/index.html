@@ -35,13 +35,14 @@
     <div class="journal-heading"><h2>研究笔记</h2><span class="journal-topic"></span></div>
     <div class="notes-resume"><a class="reading-resume" hidden></a></div>
     <nav class="journal-filters" id="notes-topics" role="group" aria-label="按主题筛选研究笔记"></nav>
-    <div class="journal-tools" role="search" aria-label="搜索研究笔记">
-      <label class="notes-search" for="notes-search">
+    <form class="journal-tools" id="notes-search-form" role="search" aria-label="搜索研究笔记">
+      <div class="notes-search">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="10.8" cy="10.8" r="6.2"/><path d="m15.5 15.5 5 5"/></svg>
         <input id="notes-search" type="search" aria-label="搜索文章标题、摘要、标签与正文" placeholder="搜索标题、正文或主题" autocomplete="off">
-      </label>
+        <button class="notes-search-submit" type="submit">搜索</button>
+      </div>
       <label class="notes-year-label" for="notes-year"><span>年份</span><select id="notes-year"><option value="全部">全部年份</option></select></label>
-    </div>
+    </form>
     <p id="notes-results-status" role="status" aria-live="polite">正在整理研究笔记…</p>
     <div class="card-grid" id="post-grid"></div>
     <p id="notes-empty" hidden>没有找到相关笔记，试试其他关键词或筛选条件。</p>
