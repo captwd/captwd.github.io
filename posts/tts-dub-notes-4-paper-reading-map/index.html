@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>从 TTS 到 Dub ④：最近读的配音论文，几条路线与启发 · captwd</title>
+<meta content="把 HPMDubbing、StyleDubber、VoiceCraft-Dub、InstructDubber、AlignDiT、FunCineForge 等阅读串起来：各自处理什么问题，我从中留下了哪些想法。" name="description"/>
+<link href="https://captwd.github.io/posts/tts-dub-notes-4-paper-reading-map/" rel="canonical"/>
+<meta content="article" property="og:type"/><meta content="captwd · 波形笔记" property="og:site_name"/><meta content="从 TTS 到 Dub ④：最近读的配音论文，几条路线与启发 · captwd" property="og:title"/><meta content="把 HPMDubbing、StyleDubber、VoiceCraft-Dub、InstructDubber、AlignDiT、FunCineForge 等阅读串起来：各自处理什么问题，我从中留下了哪些想法。" property="og:description"/><meta content="https://captwd.github.io/posts/tts-dub-notes-4-paper-reading-map/" property="og:url"/><meta content="https://captwd.github.io/assets/share-card.png" property="og:image"/><meta content="1200" property="og:image:width"/><meta content="630" property="og:image:height"/><meta content="2026-11-14" property="article:published_time"/>
+<meta content="summary_large_image" name="twitter:card"/><meta content="从 TTS 到 Dub ④：最近读的配音论文，几条路线与启发 · captwd" name="twitter:title"/><meta content="把 HPMDubbing、StyleDubber、VoiceCraft-Dub、InstructDubber、AlignDiT、FunCineForge 等阅读串起来：各自处理什么问题，我从中留下了哪些想法。" name="twitter:description"/><meta content="https://captwd.github.io/assets/share-card.png" name="twitter:image"/>
+<link href="https://captwd.github.io/rss.xml" rel="alternate" title="captwd · 波形笔记 RSS" type="application/rss+xml"/><link href="https://captwd.github.io/atom.xml" rel="alternate" title="captwd · 波形笔记 Atom" type="application/atom+xml"/>
+<link href="../../css/style.css" rel="stylesheet"/>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+<div class="bg-wrap">
+<canvas data-mode="ambient" id="bg"></canvas>
+<div class="bg-fallback"></div>
+</div>
+<div class="bg-veil"></div>
+<header class="site-head">
+<a class="brand" href="../../">
+<span class="brand-dot"></span>
+<span class="brand-name">captwd</span>
+<span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+</a>
+<nav class="site-nav">
+<a href="../../">首页</a><a data-notes-nav="" href="../../notes/">研究笔记</a>
+<a href="../../posts/about-this-blog/">关于</a>
+<a href="https://github.com/captwd" rel="noopener" target="_blank">GitHub</a>
+</nav>
+</header>
+<section class="article-hero"><div class="card-tags"><span class="card-tag">Dub</span><span class="card-tag">论文阅读</span><span class="card-tag">视频配音</span><span class="card-tag">模型设计</span><span class="card-tag">研究随记</span></div><h1>从 TTS 到 Dub ④：最近读的配音论文，几条路线与启发</h1><div class="article-meta">2026-11-14 · captwd · 研究随记 4 / 5</div></section>
+<div class="article-wrap">
+<article class="article"><blockquote><p>从 TTS 到 Dub · 近期研究随记：<a href="/posts/tts-dub-notes-1-training-and-evaluation/">① 训练与评测</a> ｜ <a href="/posts/tts-dub-notes-2-video-conditioning/">② 视频实验</a> ｜ <a href="/posts/tts-dub-notes-3-reference-emotion/">③ 参考情绪</a> ｜ <strong>④ 论文阅读</strong> ｜ <a href="/posts/tts-dub-notes-5-task-model-and-data/">⑤ 任务与数据</a></p></blockquote><p>最近读 Dub 论文时，我的问题逐渐从“它用了什么模块”，转成了“它把配音的哪一部分做好了”。有的主要处理时长和唇音同步，有的强调表达，有的在组织角色、时间和数据。</p>
+<p>下面按阅读时比较关心的问题整理几组。主要记方法和对我的启发，实验成绩需要回到各自的数据、输入条件和评测协议里看。</p>
+<h2 id="section-1">从嘴、脸和场景，走到不同层次的韵律</h2>
+<p><strong>HPMDubbing</strong> 的分工很直观：嘴部对应发音时长，面部表情关联音高和能量，场景再提供整体氛围。它让我开始把“什么时候说、怎样说、整体是什么感觉”分开考虑。显式韵律接口容易分析，同时也需要可靠的时长和声学监督。<a href="https://openaccess.thecvf.com/content/CVPR2023/papers/Cong_Learning_To_Dub_Movies_via_Hierarchical_Prosody_Models_CVPR_2023_paper.pdf">HPMDubbing 论文</a></p>
+<p><strong>StyleDubber</strong> 进一步关注多尺度风格。看论文之外，我还沿着公开代码核对过融合和声学部分，主体确实用了 Transformer；唇部信息先参与音素与时长对齐，表情与参考风格再进入后续声学建模。它带来的启发是，每一路条件都应该有明确去处。<a href="https://arxiv.org/abs/2402.12636">StyleDubber</a></p>
+<p>读这些方法时也会碰到一个实际问题：主干参数不等于整个系统的规模。视觉、说话人编码器和声码器可能在统计之外，却仍然提供了很重要的预训练能力。</p>
+<h2 id="section-2">继承一个语音模型，再学习读取视频</h2>
+<p><strong>VoiceCraft-Dub</strong> 从预训练 VoiceCraft 出发，通过 Adapter 和视听融合层加入嘴部、面部条件。它把语音生成能力与视觉适配连起来，是我理解这类路线时很重要的参照。它在局限部分承认参考语音可能压过面部条件，也给了我一个具体的诊断入口。<a href="https://arxiv.org/html/2504.02386v1">VoiceCraft-Dub</a></p>
+<p><strong>MM-MovieDubber</strong> 把视觉特征与视频理解描述结合，再用于配音。它让我意识到，连续特征和文字描述可以一起使用；真正值得比较的是各自提供了多少信息，以及两路是否重复或互相干扰。<a href="https://arxiv.org/abs/2505.16279">MM-MovieDubber</a></p>
+<p>这组阅读也缓解了我对“模型设计一定要从头开始”的纠结。基于已有 TTS 或 Dub 系统继续设计很自然，研究问题要落到一个可以观察、解释和验证的改动上。</p>
+<h2 id="section-3">用指令作为中间接口</h2>
+<p><strong>InstructDubber</strong> 先利用多模态理解得到语速、情绪等指令，再将指令用于配音对齐和生成。这种接口容易解释，也便于修改。对我最直接的启发，是把视频理解与语音执行分开检查：规划合理吗，生成器真的执行了吗？<a href="https://arxiv.org/abs/2512.17154">InstructDubber</a></p>
+<p>实际看仓库时，还需要确认特征来自哪里。例如作者说明，提供的部分情绪特征来自目标配音音频，只用于考察上界，不能直接作为正常推理的条件。这种训练和推理的信息差，往往比网络图上的一个方框更影响复现。<a href="https://github.com/ZZDoog/InstructDubber">作者实现说明</a></p>
+<p>我自己的规划和指令控制初筛也遇到了两端都不稳定的情况。因此现在会把“正确指令能做到什么”作为一个有用对照，连续视频条件是否提供更多细节，则留给实验回答。</p>
+<h2 id="section-4">保留视频时间序列，直接参与生成</h2>
+<p><strong>AlignDiT</strong> 用逐帧嘴部特征参与 Flow/DiT 生成，同时学习文本与语音的对应。我实际跑过三条官方 ADR 样例，确认了推理链路。样例的输出时长遵循作者的视频帧映射设置，完整同步和表现力仍需要独立评测。<a href="https://arxiv.org/abs/2504.20629">AlignDiT</a></p>
+<p><strong>CoSyncDiT</strong> 进一步使用嘴部条件的门控残差和对齐约束。最近读到的 <strong>RL-Dubber</strong> 则让我继续关注：在已有视觉条件生成器上，能否用后训练优化同步和质量。两者目前主要作为阅读线索，尚未在我的实验里完成系统复现。<a href="https://arxiv.org/abs/2604.12292">CoSyncDiT</a></p>
+<p>相邻任务里，<strong>ImaginTalk、HiCoDiT</strong> 也值得对照：它们把随时间变化的情绪输出用于生成条件，保留局部表达的顺序。不过，情绪输出序列与稠密视觉特征保留的信息不同；从视频推断语音内容的任务，也要与给定台词的配音区分。<a href="https://arxiv.org/abs/2503.14928">ImaginTalk</a> · <a href="https://arxiv.org/abs/2604.15923">HiCoDiT</a></p>
+<p>这些阅读让我更关心时间信息在哪里被汇聚、怎样对应到声音，以及模型是否真的利用了顺序。跨注意力、局部 AdaLN 和上采样都可以是接口，接口之前的表示和对应关系仍然需要说明。</p>
+<h2 id="section-5">从一句话，走到角色和片段的组织</h2>
+<p><strong>FunCineForge</strong> 把数据处理、配音场景、时间与说话人安排放到了一套系统里。时间—说话人条件和声学阶段的音色切换，让我看到“什么时候轮到谁说话”也需要明确建模。它还提示我，数据整理本身就是配音系统的重要组成部分。<a href="https://github.com/QwenAudio/FunCineForge">FunCineForge</a></p>
+<p>对我当前的单人起点，最想借鉴的是条件来源和时间组织。多人、旁白和翻译配音可以有各自的问题，不需要在第一版里同时背上。</p>
+<h2 id="section-6">还有几篇，作为方法工具留在旁边</h2>
+<p><strong>EmoFI-TTS</strong> 帮助我理解面部情绪条件怎样进入语音生成；<strong>MMPKD、TelME</strong> 则提供了跨模态蒸馏的训练参照。后两者处理的是情感识别，不能直接当成完整的配音系统。我曾借它们考虑视觉学生与音频教师，后来已取消教师回归主线。</p>
+<p>通用音视频生成里的 <strong>MMAudio、AV-Link</strong> 也带来了局部调制、时间位置和跨模态融合的启发。借用这些结构时，仍然要重新检查当前语音任务的监督和时间关系。</p>
+<p>现在读论文，我会在旁边记四行：输入是什么、监督从哪里来、解决了哪个具体困难、我能怎样验证它。这样回头整理时，更容易找到值得继续做的那个问题。</p><hr/><p><a href="/posts/tts-dub-notes-3-reference-emotion/">上一篇：③ 参考情绪</a> ｜ <a href="/posts/tts-dub-notes-5-task-model-and-data/">下一篇：⑤ 任务与数据</a></p></article>
+</div>
+<footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+<div aria-label="声源选择" id="audio-ui"></div>
+<script src="../../js/transition.js"></script>
+<script src="../../js/wave.js" type="module"></script>
+</body>
+</html>
+

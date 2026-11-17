@@ -423,5 +423,155 @@ window.POSTS = [
       "随笔"
     ],
     "excerpt": "大一的话，最开始一两个月还是比较充实的，每天看看python，学学ml，我个人还是比较满意的。然后我对自己也不是很自信，所以在期中和期末考试上花的时间比较多，两个学期都感觉期中刚过完就开始复习期末了。下面分享一些东西吧。"
+  },
+  {
+    "slug": "tts-dub-notes-1-training-and-evaluation",
+    "title": "从 TTS 到 Dub ①：训练、复现与评测",
+    "date": "2026-11-14",
+    "tags": [
+      "TTS",
+      "F5-TTS",
+      "OmniVoice",
+      "评测",
+      "研究随记"
+    ],
+    "categories": [
+      "语音研究随记"
+    ],
+    "excerpt": "从英语 F5 Small、GRPO 后训练到 OmniVoice 的 LibriTTS 复现，整理这段时间的训练工作，以及识别器、参考转写和音色指标带来的几次提醒。",
+    "landscape": {
+      "label": "从训练到评测",
+      "region": "语音研究随记",
+      "frequency": 0.23,
+      "depth": 0.27,
+      "color": "#a1f9d5",
+      "theme": "flow",
+      "sound": {
+        "start": 28,
+        "end": 34,
+        "title": "一句话的参照",
+        "note": "沿着这段乐句，回看一次生成背后的训练与判断。"
+      }
+    }
+  },
+  {
+    "slug": "tts-dub-notes-2-video-conditioning",
+    "title": "从 TTS 到 Dub ②：让视频参与语音生成的几次尝试",
+    "date": "2026-11-14",
+    "tags": [
+      "TTS",
+      "视频条件",
+      "Adapter",
+      "表现力",
+      "研究随记"
+    ],
+    "categories": [
+      "语音研究随记"
+    ],
+    "excerpt": "从视频情绪蒸馏、指令规划到 F5 跨注意力 Adapter，记录几次效果有限的尝试，以及怎样一步步把问题落到视频是否改善语音表达上。",
+    "landscape": {
+      "label": "让声音看见画面",
+      "region": "语音研究随记",
+      "frequency": 0.39,
+      "depth": 0.42,
+      "color": "#a8d9f2",
+      "theme": "guidance",
+      "sound": {
+        "start": 76,
+        "end": 82,
+        "title": "画面里的线索",
+        "note": "一段声音怎样跟随可见的表演，仍需要慢慢核对。"
+      }
+    }
+  },
+  {
+    "slug": "tts-dub-notes-3-reference-emotion",
+    "title": "从 TTS 到 Dub ③：参考音色里也带着情绪",
+    "date": "2026-11-14",
+    "tags": [
+      "TTS",
+      "音色",
+      "情绪解耦",
+      "IndexTTS2",
+      "研究随记"
+    ],
+    "categories": [
+      "语音研究随记"
+    ],
+    "excerpt": "希望参考录音只提供音色，实际却还有语气和情绪。整理一次说话人向量与 Mel 干预的尝试、有限的收益，以及尚未建立清楚的前提。",
+    "landscape": {
+      "label": "音色里的另一种语气",
+      "region": "语音研究随记",
+      "frequency": 0.52,
+      "depth": 0.55,
+      "color": "#b9b3ed",
+      "theme": "spectrum",
+      "sound": {
+        "start": 132,
+        "end": 138,
+        "title": "同一个声音",
+        "note": "身份与表达交织在一段录音里，分开它们比画一条分支更难。"
+      }
+    }
+  },
+  {
+    "slug": "tts-dub-notes-4-paper-reading-map",
+    "title": "从 TTS 到 Dub ④：最近读的配音论文，几条路线与启发",
+    "date": "2026-11-14",
+    "tags": [
+      "Dub",
+      "论文阅读",
+      "视频配音",
+      "模型设计",
+      "研究随记"
+    ],
+    "categories": [
+      "语音研究随记"
+    ],
+    "excerpt": "把 HPMDubbing、StyleDubber、VoiceCraft-Dub、InstructDubber、AlignDiT、FunCineForge 等阅读串起来：各自处理什么问题，我从中留下了哪些想法。",
+    "landscape": {
+      "label": "顺着论文找问题",
+      "region": "语音研究随记",
+      "frequency": 0.66,
+      "depth": 0.68,
+      "color": "#e4c99b",
+      "theme": "wire",
+      "sound": {
+        "start": 148,
+        "end": 154,
+        "title": "几条相邻的路",
+        "note": "不同的配音方法，各自沿着一个具体困难往前走。"
+      }
+    }
+  },
+  {
+    "slug": "tts-dub-notes-5-task-model-and-data",
+    "title": "从 TTS 到 Dub ⑤：回到给视频配音，重新整理任务与数据",
+    "date": "2026-11-14",
+    "tags": [
+      "Dub",
+      "研究思路",
+      "数据集",
+      "视频配音",
+      "研究随记"
+    ],
+    "categories": [
+      "语音研究随记"
+    ],
+    "excerpt": "把主任务收敛到对应视频配音，重新整理文本、音色与视频三路条件，回看 EmotionTalk、V2C 和 CineDub 的数据核查，以及接下来想先验证的问题。",
+    "landscape": {
+      "label": "回到这段视频",
+      "region": "语音研究随记",
+      "frequency": 0.79,
+      "depth": 0.8,
+      "color": "#93d9ca",
+      "theme": "guidance",
+      "sound": {
+        "start": 188,
+        "end": 194,
+        "title": "把问题收拢",
+        "note": "把已有实验与阅读收在一起，给下一步留一个清楚的起点。"
+      }
+    }
   }
 ];

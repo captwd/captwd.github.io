@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>从 TTS 到 Dub ③：参考音色里也带着情绪 · captwd</title>
+<meta content="希望参考录音只提供音色，实际却还有语气和情绪。整理一次说话人向量与 Mel 干预的尝试、有限的收益，以及尚未建立清楚的前提。" name="description"/>
+<link href="https://captwd.github.io/posts/tts-dub-notes-3-reference-emotion/" rel="canonical"/>
+<meta content="article" property="og:type"/><meta content="captwd · 波形笔记" property="og:site_name"/><meta content="从 TTS 到 Dub ③：参考音色里也带着情绪 · captwd" property="og:title"/><meta content="希望参考录音只提供音色，实际却还有语气和情绪。整理一次说话人向量与 Mel 干预的尝试、有限的收益，以及尚未建立清楚的前提。" property="og:description"/><meta content="https://captwd.github.io/posts/tts-dub-notes-3-reference-emotion/" property="og:url"/><meta content="https://captwd.github.io/assets/share-card.png" property="og:image"/><meta content="1200" property="og:image:width"/><meta content="630" property="og:image:height"/><meta content="2026-11-14" property="article:published_time"/>
+<meta content="summary_large_image" name="twitter:card"/><meta content="从 TTS 到 Dub ③：参考音色里也带着情绪 · captwd" name="twitter:title"/><meta content="希望参考录音只提供音色，实际却还有语气和情绪。整理一次说话人向量与 Mel 干预的尝试、有限的收益，以及尚未建立清楚的前提。" name="twitter:description"/><meta content="https://captwd.github.io/assets/share-card.png" name="twitter:image"/>
+<link href="https://captwd.github.io/rss.xml" rel="alternate" title="captwd · 波形笔记 RSS" type="application/rss+xml"/><link href="https://captwd.github.io/atom.xml" rel="alternate" title="captwd · 波形笔记 Atom" type="application/atom+xml"/>
+<link href="../../css/style.css" rel="stylesheet"/>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+<div class="bg-wrap">
+<canvas data-mode="ambient" id="bg"></canvas>
+<div class="bg-fallback"></div>
+</div>
+<div class="bg-veil"></div>
+<header class="site-head">
+<a class="brand" href="../../">
+<span class="brand-dot"></span>
+<span class="brand-name">captwd</span>
+<span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+</a>
+<nav class="site-nav">
+<a href="../../">首页</a><a data-notes-nav="" href="../../notes/">研究笔记</a>
+<a href="../../posts/about-this-blog/">关于</a>
+<a href="https://github.com/captwd" rel="noopener" target="_blank">GitHub</a>
+</nav>
+</header>
+<section class="article-hero"><div class="card-tags"><span class="card-tag">TTS</span><span class="card-tag">音色</span><span class="card-tag">情绪解耦</span><span class="card-tag">IndexTTS2</span><span class="card-tag">研究随记</span></div><h1>从 TTS 到 Dub ③：参考音色里也带着情绪</h1><div class="article-meta">2026-11-14 · captwd · 研究随记 3 / 5</div></section>
+<div class="article-wrap">
+<article class="article"><blockquote><p>从 TTS 到 Dub · 近期研究随记：<a href="/posts/tts-dub-notes-1-training-and-evaluation/">① 训练与评测</a> ｜ <a href="/posts/tts-dub-notes-2-video-conditioning/">② 视频实验</a> ｜ <strong>③ 参考情绪</strong> ｜ <a href="/posts/tts-dub-notes-4-paper-reading-map/">④ 论文阅读</a> ｜ <a href="/posts/tts-dub-notes-5-task-model-and-data/">⑤ 任务与数据</a></p></blockquote><p>做视频条件语音时，我一直希望输入有个清楚的分工：文本提供内容，参考语音提供音色，视频提供表达。</p>
+<p>但参考录音本身就有语气、音高、节奏和情绪。模型接收到的是一段完整声音，它学到的分工未必和我画的数据流一样。这也是后来反复回到“音色与情绪能不能分开”的原因。</p>
+<h2 id="section-1">先把问题写成一个可以检查的现象</h2>
+<p>我关心的情形是：目标视频和台词固定，提供同一个人不同情绪的参考录音，生成语气会不会跟着参考变。如果它过度继承参考，就可能与目标画面冲突。</p>
+<p>这个担心有文献线索。VoiceCraft-Dub 在讨论部分提到，模型有时会更跟随参考语音的特征，面部输入的影响被削弱。不过，作者没有把原因明确定位到“说话人向量中的情绪”。它支持继续调查参考依赖，具体机制还需要自己验证。<a href="https://arxiv.org/html/2504.02386v1#S5">VoiceCraft-Dub §5</a></p>
+<p>对我来说，第一步应该是把这个现象重复观察出来。否则很容易先设计一个“擦除模块”，再倒过来寻找它应该解决的问题。</p>
+<h2 id="section-2">实际做过的是两处有限的干预</h2>
+<p>我在冻结的 IndexTTS2 上做过参考条件实验。一处修改全局说话人向量，减弱与情绪类别有关的线性方向；另一处修改参考 Mel 的平均频谱。后者对选中的帧减去同一个频率修正向量，保留了原来的帧数和时间结构。</p>
+<p>拟合时按说话人分折，避免直接用当前留出人物的数据学习擦除方向。随后比较原始条件、只处理说话人向量、只处理 Mel，以及两处都处理。</p>
+<p>这里有个很容易被名字遮住的限制：平均频谱被修改后，原有停顿、局部节奏等时间线索仍在。原模型里还有其他参考路径。即使某一路更难读出情绪，生成器依然可能从其他地方获得表达信息。</p>
+<h2 id="section-3">数量做上去了，收益仍然很有限</h2>
+<p>最近一轮以“生气的音色参考，开心的目标情绪”为设置，主实验有 1,732 个目标、四个条件，另外补了少量参考替换对照。</p>
+<p>只处理说话人向量时，自动开心分数平均提高约 1 个百分点，大部分句子的变化很小。加入当前 Mel 均值处理以后，目标开心分数没有出现相应收益，音色相似度还有明显代价。</p>
+<p>单独做表示探针时，情绪可读性确实下降过。但一个分类器更难从特征里识别情绪，与最终配音更符合目标，是两个需要分别检查的结果。这里的情绪分数也来自自动模型，不能解释成人类感受到的情绪强度。</p>
+<p>更关键的是，那组补充对照还没有稳定建立最初的前提：把生气参考换成同人中性参考后，目标开心分数并没有一致提高。不同参考的内容、会话和录音条件也一起变了，所以现在还无法把变化干净地归给参考情绪。</p>
+<h2 id="section-4">现在对“解耦”的理解更谨慎了</h2>
+<p>以前觉得，找到情绪方向再投影掉，可能就接近“只剩音色”。实际模型的条件路径要复杂得多：处理一个向量，可能遗漏其他路径；处理得更强，又可能损伤身份信息或改变输入分布。</p>
+<p>这轮生成模型始终冻结，也没有训练它适应改过的参考条件。因此，结果比较适合作为接口诊断。以后如果换一种音色接口，仍要单独确认它保留了多少身份、损失了多少生成质量。</p>
+<p>我目前把参考情绪干扰保留为候选问题。接下来更想弄清楚：哪些参考确实会把输出带偏，影响经过哪些路径，以及干预后是否减少了这种敏感性。需要有完整的“参考情绪 × 处理开关”对照，也需要独立听评。</p>
+<p>这件事最后可能成为一个改进点，也可能只是帮助理解现有 Dub 模型的一组诊断。先把现象和边界说明白，后面设计模块时才有依据。</p><hr/><p><a href="/posts/tts-dub-notes-2-video-conditioning/">上一篇：② 视频实验</a> ｜ <a href="/posts/tts-dub-notes-4-paper-reading-map/">下一篇：④ 论文阅读</a></p></article>
+</div>
+<footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+<div aria-label="声源选择" id="audio-ui"></div>
+<script src="../../js/transition.js"></script>
+<script src="../../js/wave.js" type="module"></script>
+</body>
+</html>
+

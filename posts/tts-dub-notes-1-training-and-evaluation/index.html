@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>从 TTS 到 Dub ①：训练、复现与评测 · captwd</title>
+<meta content="从英语 F5 Small、GRPO 后训练到 OmniVoice 的 LibriTTS 复现，整理这段时间的训练工作，以及识别器、参考转写和音色指标带来的几次提醒。" name="description"/>
+<link href="https://captwd.github.io/posts/tts-dub-notes-1-training-and-evaluation/" rel="canonical"/>
+<meta content="article" property="og:type"/><meta content="captwd · 波形笔记" property="og:site_name"/><meta content="从 TTS 到 Dub ①：训练、复现与评测 · captwd" property="og:title"/><meta content="从英语 F5 Small、GRPO 后训练到 OmniVoice 的 LibriTTS 复现，整理这段时间的训练工作，以及识别器、参考转写和音色指标带来的几次提醒。" property="og:description"/><meta content="https://captwd.github.io/posts/tts-dub-notes-1-training-and-evaluation/" property="og:url"/><meta content="https://captwd.github.io/assets/share-card.png" property="og:image"/><meta content="1200" property="og:image:width"/><meta content="630" property="og:image:height"/><meta content="2026-11-14" property="article:published_time"/>
+<meta content="summary_large_image" name="twitter:card"/><meta content="从 TTS 到 Dub ①：训练、复现与评测 · captwd" name="twitter:title"/><meta content="从英语 F5 Small、GRPO 后训练到 OmniVoice 的 LibriTTS 复现，整理这段时间的训练工作，以及识别器、参考转写和音色指标带来的几次提醒。" name="twitter:description"/><meta content="https://captwd.github.io/assets/share-card.png" name="twitter:image"/>
+<link href="https://captwd.github.io/rss.xml" rel="alternate" title="captwd · 波形笔记 RSS" type="application/rss+xml"/><link href="https://captwd.github.io/atom.xml" rel="alternate" title="captwd · 波形笔记 Atom" type="application/atom+xml"/>
+<link href="../../css/style.css" rel="stylesheet"/>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "../../vendor/three/build/three.module.min.js",
+      "three/addons/": "../../vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body class="ambient">
+<div class="bg-wrap">
+<canvas data-mode="ambient" id="bg"></canvas>
+<div class="bg-fallback"></div>
+</div>
+<div class="bg-veil"></div>
+<header class="site-head">
+<a class="brand" href="../../">
+<span class="brand-dot"></span>
+<span class="brand-name">captwd</span>
+<span class="brand-sub">HAPLOUS, IS THE GOAL</span>
+</a>
+<nav class="site-nav">
+<a href="../../">首页</a><a data-notes-nav="" href="../../notes/">研究笔记</a>
+<a href="../../posts/about-this-blog/">关于</a>
+<a href="https://github.com/captwd" rel="noopener" target="_blank">GitHub</a>
+</nav>
+</header>
+<section class="article-hero"><div class="card-tags"><span class="card-tag">TTS</span><span class="card-tag">F5-TTS</span><span class="card-tag">OmniVoice</span><span class="card-tag">评测</span><span class="card-tag">研究随记</span></div><h1>从 TTS 到 Dub ①：训练、复现与评测</h1><div class="article-meta">2026-11-14 · captwd · 研究随记 1 / 5</div></section>
+<div class="article-wrap">
+<article class="article"><blockquote><p>从 TTS 到 Dub · 近期研究随记：<strong>① 训练与评测</strong> ｜ <a href="/posts/tts-dub-notes-2-video-conditioning/">② 视频实验</a> ｜ <a href="/posts/tts-dub-notes-3-reference-emotion/">③ 参考情绪</a> ｜ <a href="/posts/tts-dub-notes-4-paper-reading-map/">④ 论文阅读</a> ｜ <a href="/posts/tts-dub-notes-5-task-model-and-data/">⑤ 任务与数据</a></p></blockquote><p>前面写过一些 Matcha-TTS 和 F5 的笔记。后来这段时间，事情逐渐从“改一个模块，看看声音有没有变化”，变成了训练、复现、评测和选方向一起推进。文件攒了不少，思路也改过几次，趁现在把它们串起来。</p>
+<p>这个系列大致按我自己的经历来写：先是纯 TTS，再尝试视频条件，接着检查音色和情绪的干扰，最后回到视频配音。这里先记训练和评测这部分。</p>
+<h2 id="section-1">F5 跑了很久，才慢慢有了一个参照</h2>
+<p>这一轮继续训练了英语 F5 Small，最后有完整保存和评测的权重到了 676k 步。后面的强化学习实验，则从已经评测过的 578k EMA 权重出发。训练日志走到哪一步、磁盘上真正保存了哪一份权重，这些后来都重新核对过。</p>
+<p>选 F5 的一个原因，是它的 flow matching 路线比较容易顺着代码理解：给定文本和参考声学条件，从噪声逐步生成 Mel，再交给声码器。它把很多事情放进统一的生成过程里，也留下了时长、参考条件和控制方式这些值得继续追问的问题。<a href="https://arxiv.org/abs/2410.06885">F5-TTS 论文</a></p>
+<p>我还整理了几个现成 TTS 的对照，包括 CosyVoice、IndexTTS2、VoxCPM、OmniVoice 等。做完才发现，一张模型排名表背后藏着很多设置：有没有参考转写、怎么估计目标时长、用哪个 ASR、生成失败怎么算，都会改变数字。</p>
+<p>尤其是参考转写。有些接口只用参考声音，有些还需要参考文本。把两种设置混起来，很容易把输入信息的差异理解成模型架构的差异。后来我把有转写、无转写的实验分开整理，也把超时和异常长生成单独留下。</p>
+<h2 id="section-2">读过的 TTS 论文，后来按几个问题来记</h2>
+<p>这段时间也回头串过一遍 TTS 文献。Tacotron、FastSpeech 和 FastSpeech 2 让我把注意力放到文本与声音的对齐，以及时长、音高、能量的监督上；Matcha、E2 TTS 和 F5 则让我继续看，连续声学表示里怎样组织并行生成和条件控制。</p>
+<p>VALL-E、OmniVoice 把问题带到离散语音码和多码本建模；CosyVoice 系列让我更关心语义生成与声学恢复的分工。IndexTTS2、X-Voice 等工作，又把参考条件、情绪和时长控制拉回了视野。这些路线的目标有重叠，具体依赖和接口却很不一样。</p>
+<p>我现在会按“生成什么表示、怎么对齐、参考里保留什么、控制落在哪、什么时候能输出声音”来记文章。读完以后，再回到自己的代码看这些问题分别由哪一段承担。此前关于<a href="https://captwd.github.io/posts/cfm-velocity-field-notes/">流匹配</a>、<a href="https://captwd.github.io/posts/conditions-and-cfg-in-cfm/">条件与 CFG</a>以及<a href="https://captwd.github.io/posts/alignment-ctc-transducer-aed-mas/">对齐</a>的笔记，也是在补这条理解链。</p>
+<h2 id="section-3">OmniVoice：读得更准了，音色却没有一起变好</h2>
+<p>另一条比较完整的工作，是在 LibriTTS 上做 OmniVoice 的英语规模复现。实际过滤后的训练语音约 550.6 小时，从 Qwen 初始化开始训练到 100k，再继续到 150k。它沿用官方核心实现，但数据和预算都与论文的大规模模型不同。<a href="https://arxiv.org/abs/2604.00688">OmniVoice 论文</a></p>
+<p>下面只留两个检查点。同一批 1,127 条 LibriSpeech-PC 测试语句，使用固定生成音频，并统一文本规范化：</p>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th style="text-align: right;">HuBERT WER ↓</th>
+<th style="text-align: right;">Whisper WER ↓</th>
+<th style="text-align: right;">说话人相似度 ↑</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>100k</td>
+<td style="text-align: right;">1.766%</td>
+<td style="text-align: right;">2.206%</td>
+<td style="text-align: right;">0.5571</td>
+</tr>
+<tr>
+<td>150k</td>
+<td style="text-align: right;">1.628%</td>
+<td style="text-align: right;">1.934%</td>
+<td style="text-align: right;">0.5460</td>
+</tr>
+</tbody>
+</table>
+<p>续训后的内容错误率更低，说话人相似度却下降了。这个结果让我更直观地看到：训练目标改善的时候，几个听感维度可以朝不同方向走。单靠继续加步数，也没有自动补上音色保持的差距。</p>
+<p>两个识别器给出的 WER 也不同。它们是在通过各自的识别能力测生成语音，真实录音同样会被识别错。所以我现在看到一个 WER，第一反应会是确认识别器、样本和归一化规则。</p>
+<h2 id="section-4">强化学习这条支线，也没有给出统一的好消息</h2>
+<p>期间读了 F5R-TTS、FlowTTS-GRPO，也做过一轮 GRPO 后训练。除了把训练跑通，还花了时间核对训练目标、参考模型、奖励计算，以及微调前后的推理管线。</p>
+<p>修正实现后，用同一个 F5 基座做配对评测，结果存在取舍：一套英语测试的 WER 下降，另一套上升；两处变化的配对区间都跨过零。部分音色指标有改善，但现有结果还撑不起“英语整体更好了”这个结论。</p>
+<p>英语 Small 在中文上很差的结果也保留了。中文 CER 即使下降，仍然超过 100%，说明它在这套设置下远没有达到可用程度。一个数字往好的方向移动，与系统获得一种实用能力，中间还有很长的距离。</p>
+<h2 id="section-5">这部分工作最后留下的习惯</h2>
+<p>现在整理实验，我会先确认三个东西：比较对象收到的信息是否一样；所有计划样本有没有被算进去；差异是否大到值得据此做决定。</p>
+<p>内容正确、音色相似、声音自然、表达合适，这几件事也开始分开看。以前容易被一个总分吸引，后来更想知道它到底测到了什么，以及哪些问题还留在表格外面。</p>
+<p>这些习惯后来都带进了视频实验。只是视频又多出一个问题：即使声音发生了变化，怎样知道变化来自画面，而且与画面有关？下一篇从这里继续。</p><hr/><p><a href="/posts/tts-dub-notes-2-video-conditioning/">下一篇：② 视频实验</a></p></article>
+</div>
+<footer class="site-foot">© 2026 captwd · 由 three.js 手工驱动</footer>
+<div aria-label="声源选择" id="audio-ui"></div>
+<script src="../../js/transition.js"></script>
+<script src="../../js/wave.js" type="module"></script>
+</body>
+</html>
+
